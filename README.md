@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="src-tauri/icons/icon.png" width="128" height="128" alt="Peek Logo">
+</p>
+
 # Peek — 极速文件预览器
 
-Peek 是一款基于 Tauri + React 的本地文件预览器，主打“零延迟”查看体验。无论是 Markdown 的美观渲染、JSON 的结构化展示，还是纯文本、日志等常见格式，Peek 都能在瞬间以最优雅的方式呈现。
+Peek 是一款基于 Tauri + React 的本地文件预览器，主打"零延迟"查看体验。无论是 Markdown 的美观渲染、JSON 的结构化展示，还是纯文本、日志等常见格式，Peek 都能在瞬间以最优雅的方式呈现。
 
 ## 技术栈
 
@@ -13,6 +17,7 @@ Peek 是一款基于 Tauri + React 的本地文件预览器，主打“零延迟
 ## 功能特性
 
 - ✅ **多格式支持**: Markdown、JSON、HTML、纯文本、日志文件
+- ✅ **文件夹浏览**: 左侧文件树，支持拖入文件夹浏览项目
 - ✅ **极速打开**: 系统对话框（Ctrl/Cmd + O）+ 拖拽打开
 - ✅ **智能识别**: 自动根据文件扩展名识别类型
 - ✅ **Markdown 渲染**: 完整支持 GFM 语法、代码高亮、表格
@@ -32,6 +37,7 @@ peek/
 │   ├── index.css                 # 全局样式 + Tailwind
 │   ├── components/               # UI 组件
 │   │   ├── Header.tsx            # 顶部栏（打开/关闭/主题）
+│   │   ├── Sidebar.tsx           # 左侧文件树
 │   │   ├── EmptyState.tsx        # 空状态引导
 │   │   ├── FileDropZone.tsx      # 文件拖拽区域
 │   │   └── PreviewContainer.tsx  # 预览器路由
@@ -44,6 +50,7 @@ peek/
 │   ├── store/
 │   │   └── useStore.ts           # Zustand 全局状态
 │   └── utils/
+│       ├── fileTree.ts           # 文件树构建工具
 │       └── fileTypes.ts          # 文件类型检测工具
 ├── src-tauri/                    # Tauri Rust 后端
 │   ├── src/main.rs               # 主进程入口
