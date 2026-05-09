@@ -1,43 +1,70 @@
 import { useEffect } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import FileDropZone from "@/components/FileDropZone";
 import PreviewContainer from "@/components/PreviewContainer";
 import { useStore } from "@/store/useStore";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import { detectFileType } from "@/utils/fileTypes";
+import { buildFileTree } from "@/utils/fileTree";
 
 export default function App() {
-  const { file, folder, setFile, setSelectedPath } = useStore();
+  const { file, setFile, setFolder, setSelectedPath } = useStore();
 
-  // Load file content when selected path changes in sidebar
+  // Tauri native drag-drop event handler
   useEffect(() => {
-    if (!folder.selectedPath) {
-      setFile(null);
-      return;
-    }
+    let unlisten: (() => void) | null = null;
 
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const content = await readTextFile(folder.selectedPath);
-        if (cancelled) return;
-        const name = folder.selectedPath.split(/[/\\]/).pop() || "unknown";
-        setFile({
-          name,
-          path: folder.selectedPath,
-          content,
-          type: detectFileType(name),
-        });
-      } catch (err) {
-        console.error("Failed to read file:", err);
-      }
+    const setupDragDrop = async () => {
+      unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+        if (event.payload.type === "drop") {
+          const paths = event.payload.paths;
+          if (paths.length === 0) return;
+
+          const droppedPath = paths[0];
+
+          // Try to treat as directory first
+          try {
+            const tree = await buildFileTree(droppedPath);
+            setFolder({
+              rootPath: droppedPath,
+              tree,
+              selectedPath: null,
+            });
+            setFile(null);
+            return;
+          } catch (err) {
+            console.log("Not a directory or empty:", err);
+          }
+
+          // Treat as single file
+          try {
+            const content = await readTextFile(droppedPath);
+            const name = droppedPath.split(/[/\\]/).pop() || "unknown";
+            setFile({
+              name,
+              path: droppedPath,
+              content,
+              type: detectFileType(name),
+            });
+            setFolder({
+              rootPath: null,
+              tree: [],
+              selectedPath: null,
+            });
+          } catch (err) {
+            console.error("Failed to read dropped file:", err);
+          }
+        }
+      });
     };
-    load();
+
+    setupDragDrop();
     return () => {
-      cancelled = true;
+      if (unlisten) unlisten();
     };
-  }, [folder.selectedPath, setFile]);
+  }, [setFile, setFolder]);
 
   // Keyboard shortcuts
   useEffect(() => {
