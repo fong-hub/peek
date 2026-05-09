@@ -141,3 +141,13 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# macOS
+.DS_Store
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Build output (keep for reference but usually not needed in git)
+# dist/
