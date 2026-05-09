@@ -18,15 +18,18 @@ export default function App() {
 
     const setupDragDrop = async () => {
       unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+        console.log("[DEBUG] DragDrop event:", event.payload.type, event.payload.paths);
         if (event.payload.type === "drop") {
           const paths = event.payload.paths;
           if (paths.length === 0) return;
 
           const droppedPath = paths[0];
+          console.log("[DEBUG] Dropped path:", droppedPath);
 
           // Try to treat as directory first
           try {
             const tree = await buildFileTree(droppedPath);
+            console.log("[DEBUG] Folder tree loaded, items:", tree.length);
             setFolder({
               rootPath: droppedPath,
               tree,
@@ -35,7 +38,7 @@ export default function App() {
             setFile(null);
             return;
           } catch (err) {
-            console.log("Not a directory or empty:", err);
+            console.log("[DEBUG] Not a directory or empty:", err);
           }
 
           // Treat as single file
@@ -54,7 +57,7 @@ export default function App() {
               selectedPath: null,
             });
           } catch (err) {
-            console.error("Failed to read dropped file:", err);
+            console.error("[DEBUG] Failed to read dropped file:", err);
           }
         }
       });
