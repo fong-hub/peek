@@ -1,16 +1,30 @@
 import { Folder, FileText, ChevronRight, ChevronDown } from "lucide-react";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import type { TreeNode } from "@/store/useStore";
+import { detectFileType } from "@/utils/fileTypes";
 
 function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
-  const { folder, setSelectedPath, toggleNodeExpanded } = useStore();
+  const { folder, setFile, setSelectedPath, toggleNodeExpanded } = useStore();
   const isSelected = folder.selectedPath === node.path;
 
-  const handleClick = () => {
+  const handleClick = async () => {
     if (node.isDirectory) {
       toggleNodeExpanded(node.path);
     } else {
       setSelectedPath(node.path);
+      // Read and preview the file
+      try {
+        const content = await readTextFile(node.path);
+        setFile({
+          name: node.name,
+          path: node.path,
+          content,
+          type: detectFileType(node.name),
+        });
+      } catch (err) {
+        console.error("Failed to read file:", node.path, err);
+      }
     }
   };
 

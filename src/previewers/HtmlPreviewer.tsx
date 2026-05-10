@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Eye, Code } from "lucide-react";
 
 interface Props {
@@ -7,6 +7,19 @@ interface Props {
 
 export default function HtmlPreviewer({ content }: Props) {
   const [mode, setMode] = useState<"preview" | "source">("preview");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (mode === "preview" && iframeRef.current) {
+      const iframe = iframeRef.current;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(content);
+        doc.close();
+      }
+    }
+  }, [content, mode]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -36,9 +49,10 @@ export default function HtmlPreviewer({ content }: Props) {
       </div>
       <div className="flex-1 overflow-auto">
         {mode === "preview" ? (
-          <div
-            className="w-full h-full bg-white"
-            dangerouslySetInnerHTML={{ __html: content }}
+          <iframe
+            ref={iframeRef}
+            className="w-full h-full border-none bg-white"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
           />
         ) : (
           <pre className="p-6 font-mono text-sm leading-relaxed text-text-primary whitespace-pre-wrap">

@@ -21,42 +21,65 @@ function isSupportedFile(name: string): boolean {
   return SUPPORTED_EXTENSIONS.has(ext);
 }
 
-export async function buildFileTree(dirPath: string): Promise<TreeNode[]> {
-  const entries = await readDir(dirPath);
-  const nodes: TreeNode[] = [];
+// Normalize path to handle both Windows and Unix paths
+function joinPath(dir: string, name: string): string {
+  // Remove trailing slashes from directory path
+  const cleanDir = dir.replace(/[/\\]$/, "");
+  // Check if directory already ends with a drive letter (Windows)
+  if (/^[A-Za-z]:$/.test(cleanDir)) {
+    return cleanDir + "\\" + name;
+  }
+  // Use the same separator as the input directory
+  const separator = dir.includes("\\") ? "\\" : "/";
+  return cleanDir + separator + name;
+}
 
-  for (const entry of entries) {
-    const fullPath = `${dirPath}/${entry.name}`;
-    if (entry.isDirectory) {
-      const children = await buildFileTree(fullPath);
-      // Only include directories that contain supported files (recursively)
-      const hasSupportedFiles = (children: TreeNode[]): boolean =>
-        children.some((c) => !c.isDirectory || hasSupportedFiles(c.children));
-      if (hasSupportedFiles(children)) {
+export async function buildFileTree(dirPath: string): Promise<TreeNode[]> {
+  try {
+    const entries = await readDir(dirPath);
+    const nodes: TreeNode[] = [];
+
+    for (const entry of entries) {
+      const fullPath = joinPath(dirPath, entry.name);
+      if (entry.isDirectory) {
+        try {
+          const children = await buildFileTree(fullPath);
+          // Only include directories that contain supported files (recursively)
+          const hasSupportedFiles = (children: TreeNode[]): boolean =>
+            children.some((c) => !c.isDirectory || hasSupportedFiles(c.children));
+          if (hasSupportedFiles(children)) {
+            nodes.push({
+              name: entry.name,
+              path: fullPath,
+              isDirectory: true,
+              children,
+              expanded: false,
+            });
+          }
+        } catch (err) {
+          // Skip directories we can't access (permission denied, etc.)
+          console.warn(`Cannot access directory ${fullPath}:`, err);
+        }
+      } else if (isSupportedFile(entry.name)) {
         nodes.push({
           name: entry.name,
           path: fullPath,
-          isDirectory: true,
-          children,
-          expanded: false,
+          isDirectory: false,
+          children: [],
         });
       }
-    } else if (isSupportedFile(entry.name)) {
-      nodes.push({
-        name: entry.name,
-        path: fullPath,
-        isDirectory: false,
-        children: [],
-      });
     }
+
+    // Sort: directories first, then files, both alphabetically
+    nodes.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return nodes;
+  } catch (err) {
+    console.error(`Failed to build file tree for ${dirPath}:`, err);
+    throw err;
   }
-
-  // Sort: directories first, then files, both alphabetically
-  nodes.sort((a, b) => {
-    if (a.isDirectory && !b.isDirectory) return -1;
-    if (!a.isDirectory && b.isDirectory) return 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  return nodes;
 }
