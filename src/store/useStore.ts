@@ -29,11 +29,13 @@ interface Store {
   isDragging: boolean;
   theme: "dark" | "light";
   sidebarVisible: boolean;
+  sidebarWidth: number;
   setFile: (file: FileInfo | null) => void;
   setFolder: (folder: FolderState) => void;
   setIsDragging: (dragging: boolean) => void;
   toggleTheme: () => void;
   toggleSidebar: () => void;
+  setSidebarWidth: (width: number) => void;
   setSelectedPath: (path: string | null) => void;
   toggleNodeExpanded: (path: string) => void;
 }
@@ -48,6 +50,7 @@ export const useStore = create<Store>((set) => ({
   isDragging: false,
   theme: "dark",
   sidebarVisible: true,
+  sidebarWidth: 256,
   setFile: (file) => set({ file }),
   setFolder: (folder) => set({ folder }),
   setIsDragging: (isDragging) => set({ isDragging }),
@@ -58,6 +61,7 @@ export const useStore = create<Store>((set) => ({
       return { theme: next };
     }),
   toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
+  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(180, Math.min(500, width)) }),
   setSelectedPath: (path) =>
     set((state) => ({
       folder: { ...state.folder, selectedPath: path },

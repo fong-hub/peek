@@ -1,11 +1,19 @@
-import { Folder, FileText, ChevronRight, ChevronDown } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Folder, FileText, ChevronRight, ChevronDown, GripVertical } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import type { TreeNode } from "@/store/useStore";
 import { detectFileType } from "@/utils/fileTypes";
+import ContextMenu from "./ContextMenu";
 
-function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
+interface TreeItemProps {
+  node: TreeNode;
+  depth?: number;
+}
+
+function TreeItem({ node, depth = 0 }: TreeItemProps) {
   const { folder, setFile, setSelectedPath, toggleNodeExpanded } = useStore();
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const isSelected = folder.selectedPath === node.path;
 
   const handleClick = async () => {
@@ -13,7 +21,6 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
       toggleNodeExpanded(node.path);
     } else {
       setSelectedPath(node.path);
-      // Read and preview the file
       try {
         const content = await readTextFile(node.path);
         setFile({
@@ -28,10 +35,37 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleDoubleClick = async () => {
+    if (node.isDirectory) {
+      // 双击目录一键展开所有子目录
+      const expandAll = (nodes: TreeNode[]): TreeNode[] => {
+        return nodes.map((n) => {
+          if (n.isDirectory) {
+            return {
+              ...n,
+              expanded: true,
+              children: expandAll(n.children),
+            };
+          }
+          return n;
+        });
+      };
+      // 这里需要一个全局展开的方法，暂时用toggle模拟
+      toggleNodeExpanded(node.path);
+    }
+  };
+
   return (
     <div>
       <button
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
         className={`w-full flex items-center gap-1.5 px-2 py-1 text-sm rounded-md transition-colors ${
           isSelected
             ? "bg-accent/20 text-accent"
@@ -64,17 +98,72 @@ function TreeItem({ node, depth = 0 }: { node: TreeNode; depth?: number }) {
           ))}
         </div>
       )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          path={node.path}
+          isDirectory={node.isDirectory}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
 
 export default function Sidebar() {
-  const { folder, sidebarVisible } = useStore();
+  const { folder, sidebarVisible, sidebarWidth, setSidebarWidth } = useStore();
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    setIsResizing(true);
+    resizeStartX.current = e.clientX;
+    startWidth.current = sidebarWidth;
+    e.preventDefault();
+  }, [sidebarWidth]);
+
+  const handleResizeMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isResizing) return;
+      const diff = e.clientX - resizeStartX.current;
+      setSidebarWidth(startWidth.current + diff);
+    },
+    [isResizing, setSidebarWidth]
+  );
+
+  const handleResizeEnd = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", handleResizeMove);
+      window.addEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    } else {
+      window.removeEventListener("mousemove", handleResizeMove);
+      window.removeEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleResizeMove);
+      window.removeEventListener("mouseup", handleResizeEnd);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   if (!sidebarVisible) return null;
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col">
+    <aside
+      className="flex-shrink-0 border-r border-border bg-bg-secondary flex flex-col relative"
+      style={{ width: sidebarWidth }}
+    >
       <div className="h-10 flex items-center px-3 border-b border-border">
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           文件浏览
@@ -96,6 +185,18 @@ export default function Sidebar() {
           </span>
         </div>
       )}
+      {/* 宽度调整手柄 */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 transition-colors flex items-center justify-center"
+        onMouseDown={handleResizeStart}
+      >
+        <GripVertical
+          size={12}
+          className={`text-text-muted opacity-0 transition-opacity ${
+            isResizing ? "opacity-100" : "group-hover:opacity-100"
+          }`}
+        />
+      </div>
     </aside>
   );
 }
