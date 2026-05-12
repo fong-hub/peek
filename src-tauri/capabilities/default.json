@@ -8,7 +8,6 @@
     "fs:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
-    "shell:default",
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
@@ -23,7 +22,9 @@
     },
     {
       "identifier": "shell:allow-open",
-      "allow": [{ "path": "**" }]
+      "scope": {
+        "allow": ["file://**", "**"]
+      }
     }
   ]
 }
