@@ -1,12 +1,15 @@
-import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X } from "lucide-react";
+import { useState } from "react";
+import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import { detectFileType } from "@/utils/fileTypes";
 import { buildFileTree } from "@/utils/fileTree";
+import About from "./About";
 
 export default function Header() {
   const { file, folder, theme, setFile, setFolder, toggleTheme, toggleSidebar, sidebarVisible } = useStore();
+  const [showAbout, setShowAbout] = useState(false);
 
   const handleOpenFile = async () => {
     try {
@@ -120,7 +123,15 @@ export default function Header() {
         >
           {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
         </button>
+        <button
+          onClick={() => setShowAbout(true)}
+          className="flex items-center justify-center w-8 h-8 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+          title="关于 Peek"
+        >
+          <Info size={15} />
+        </button>
       </div>
+      {showAbout && <About onClose={() => setShowAbout(false)} />}
     </header>
   );
 }

@@ -149,5 +149,11 @@ vite.config.ts.timestamp-*
 src-tauri/target/
 src-tauri/gen/
 
+# Claude Code local settings
+.claude/
+
+# Release artifacts
+latest.json
+
 # Build output (keep for reference but usually not needed in git)
 # dist/

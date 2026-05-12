@@ -6,6 +6,11 @@
     "core:default",
     "dialog:default",
     "fs:default",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install",
+    "updater:allow-download-and-install",
+    "process:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
     {
