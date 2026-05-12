@@ -19,12 +19,6 @@
     {
       "identifier": "fs:allow-read-dir",
       "allow": [{ "path": "**" }]
-    },
-    {
-      "identifier": "shell:allow-open",
-      "scope": {
-        "allow": ["file://**", "**"]
-      }
     }
   ]
 }

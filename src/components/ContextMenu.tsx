@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { FolderOpen, Copy, ExternalLink, FileDigit } from "lucide-react";
-import { open } from "@tauri-apps/plugin-shell";
+import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 interface ContextMenuProps {
@@ -40,12 +40,12 @@ export default function ContextMenu({
   const openInFinder = async () => {
     // 打开所在目录
     const dirPath = isDirectory ? path : path.split(/[/\\]/).slice(0, -1).join("/");
-    await open(dirPath);
+    await invoke("open_path", { path: dirPath });
     onClose();
   };
 
   const openWithDefault = async () => {
-    await open(path);
+    await invoke("open_path", { path });
     onClose();
   };
 
