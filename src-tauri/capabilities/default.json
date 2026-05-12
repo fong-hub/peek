@@ -6,7 +6,8 @@
     "core:default",
     "dialog:default",
     "fs:default",
-    "clipboard-manager:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
     "shell:default",
     {
       "identifier": "fs:allow-read-text-file",
