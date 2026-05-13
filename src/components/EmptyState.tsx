@@ -1,6 +1,7 @@
 import { FileSearch, FolderOpen, Zap, Keyboard } from "lucide-react";
 
 export default function EmptyState() {
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center text-text-secondary">
       <div className="flex flex-col items-center gap-6 max-w-md text-center">
@@ -15,6 +16,7 @@ export default function EmptyState() {
             支持 Markdown、JSON、HTML、纯文本、日志等多种格式
           </p>
         </div>
+
         <div className="flex items-center gap-6 text-xs text-text-muted">
           <div className="flex items-center gap-1.5">
             <Zap size={13} />

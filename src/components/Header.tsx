@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info } from "lucide-react";
+import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
@@ -8,7 +8,7 @@ import { buildFileTree } from "@/utils/fileTree";
 import About from "./About";
 
 export default function Header() {
-  const { file, folder, theme, setFile, setFolder, toggleTheme, toggleSidebar, sidebarVisible } = useStore();
+  const { file, folder, theme, setFile, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible } = useStore();
   const [showAbout, setShowAbout] = useState(false);
 
   const handleOpenFile = async () => {
@@ -123,6 +123,19 @@ export default function Header() {
         >
           {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
         </button>
+        {file && (
+          <button
+            onClick={toggleInfoPanel}
+            className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+              infoPanelVisible
+                ? "text-accent bg-accent/10"
+                : "text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+            }`}
+            title="文件信息"
+          >
+            <FileText size={15} />
+          </button>
+        )}
         <button
           onClick={() => setShowAbout(true)}
           className="flex items-center justify-center w-8 h-8 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"

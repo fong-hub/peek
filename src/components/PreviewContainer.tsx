@@ -1,5 +1,6 @@
 import { useStore } from "@/store/useStore";
 import EmptyState from "./EmptyState";
+import FileInfoPanel from "./FileInfoPanel";
 import MarkdownPreviewer from "@/previewers/MarkdownPreviewer";
 import JsonPreviewer from "@/previewers/JsonPreviewer";
 import TextPreviewer from "@/previewers/TextPreviewer";
@@ -13,7 +14,18 @@ export default function PreviewContainer() {
     return <EmptyState />;
   }
 
-  switch (file.type) {
+  return (
+    <div className="w-full h-full flex flex-col">
+      <FileInfoPanel />
+      <div className="flex-1 overflow-hidden">
+        {renderPreviewer(file.type, file)}
+      </div>
+    </div>
+  );
+}
+
+function renderPreviewer(type: string, file: any) {
+  switch (type) {
     case "markdown":
       return <MarkdownPreviewer content={file.content} />;
     case "json":
