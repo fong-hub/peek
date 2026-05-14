@@ -1,18 +1,18 @@
 {
-  "version": "1.0.0-beta.6",
-  "notes": "Release v1.0.0-beta.6",
-  "pub_date": "2026-05-13T16:20:53Z",
+  "version": "1.0.0-beta.7",
+  "notes": "Release v1.0.0-beta.7",
+  "pub_date": "2026-05-14T14:28:27Z",
   "platforms": {
     "darwin-aarch64": {
-      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.6/Peek_1.0.0-beta.6_aarch64.dmg",
+      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.7/Peek_1.0.0-beta.7_aarch64.dmg",
       "signature": ""
     },
     "darwin-x86_64": {
-      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.6/Peek_1.0.0-beta.6_x64.dmg",
+      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.7/Peek_1.0.0-beta.7_x64.dmg",
       "signature": ""
     },
     "windows-x86_64": {
-      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.6/Peek_1.0.0-beta.6_x64.msi",
+      "url": "https://github.com/fong-hub/peek/releases/download/v1.0.0-beta.7/Peek_1.0.0-beta.7_x64.msi",
       "signature": ""
     }
   }
