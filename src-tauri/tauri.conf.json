@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Peek",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.peek.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -38,8 +38,8 @@
       "endpoints": [
         "https://github.com/fong-hub/peek/releases/latest/download/latest.json"
       ],
-      "pubkey": "",
-      "signature": false
+      "pubkey": "RWQSXF7R2/uuryHvZlt+bBfAn5hFSYsV/JqcH/S+5Op8jUTrutHuMb0d",
+      "signature": true
     }
   },
   "bundle": {
