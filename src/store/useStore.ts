@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { addRecentItem } from "@/utils/recent";
 
-export type PreviewType = "markdown" | "json" | "text" | "html" | "log" | "unknown";
+export type PreviewType = "markdown" | "json" | "text" | "html" | "log" | "unknown" | "unsupported";
 
 export interface FileInfo {
   name: string;
@@ -61,7 +61,7 @@ export const useStore = create<Store>((set) => ({
   theme: "dark",
   sidebarVisible: true,
   sidebarWidth: 256,
-  infoPanelVisible: false,
+  infoPanelVisible: true,
   setFile: (file, addToRecent = true) => {
     if (file && addToRecent) {
       addRecentItem(file.path, file.name, false);

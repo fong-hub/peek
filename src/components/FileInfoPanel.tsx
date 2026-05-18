@@ -1,5 +1,6 @@
-import { FileText, Copy, Calendar, Hash } from "lucide-react";
+import { FileText, Copy, Calendar, Hash, FolderOpen, ExternalLink } from "lucide-react";
 import { useStore } from "@/store/useStore";
+import { invoke } from "@tauri-apps/api/core";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -34,6 +35,17 @@ export default function FileInfoPanel() {
     navigator.clipboard.writeText(text).catch(console.error);
   };
 
+  const openInFinder = async () => {
+    if (!file) return;
+    const dirPath = file.path.split(/[/\\]/).slice(0, -1).join("/");
+    await invoke("open_path", { path: dirPath });
+  };
+
+  const openWithDefault = async () => {
+    if (!file) return;
+    await invoke("open_path", { path: file.path });
+  };
+
 
   return (
     <div className="border-b border-border bg-bg-tertiary">
@@ -59,6 +71,20 @@ export default function FileInfoPanel() {
               title="复制路径"
             >
               <Copy size={12} />
+            </button>
+            <button
+              onClick={openInFinder}
+              className="p-1 text-text-muted hover:text-text-primary transition-colors"
+              title="打开所在目录"
+            >
+              <FolderOpen size={12} />
+            </button>
+            <button
+              onClick={openWithDefault}
+              className="p-1 text-text-muted hover:text-text-primary transition-colors"
+              title="用默认应用打开"
+            >
+              <ExternalLink size={12} />
             </button>
           </div>
 

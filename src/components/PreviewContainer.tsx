@@ -6,6 +6,7 @@ import JsonPreviewer from "@/previewers/JsonPreviewer";
 import TextPreviewer from "@/previewers/TextPreviewer";
 import HtmlPreviewer from "@/previewers/HtmlPreviewer";
 import LogPreviewer from "@/previewers/LogPreviewer";
+import UnsupportedPreviewer from "@/previewers/UnsupportedPreviewer";
 
 export default function PreviewContainer() {
   const { file } = useStore();
@@ -25,6 +26,16 @@ export default function PreviewContainer() {
 }
 
 function renderPreviewer(type: string, file: any) {
+  if (type === "unsupported") {
+    return (
+      <UnsupportedPreviewer
+        fileName={file.name}
+        filePath={file.path}
+        reason={file.content}
+      />
+    );
+  }
+
   switch (type) {
     case "markdown":
       return <MarkdownPreviewer content={file.content} />;

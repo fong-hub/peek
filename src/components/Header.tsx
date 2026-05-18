@@ -1,15 +1,23 @@
 import { useState } from "react";
-import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText } from "lucide-react";
+import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText, Copy } from "lucide-react";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import { detectFileType } from "@/utils/fileTypes";
 import { buildFileTree } from "@/utils/fileTree";
+import { isBinaryFile, isFileTooLarge, formatFileSize } from "@/utils/fileUtils";
 import About from "./About";
 
 export default function Header() {
   const { file, folder, theme, setFile, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible } = useStore();
   const [showAbout, setShowAbout] = useState(false);
+
+  const copyFilePath = async () => {
+    if (file) {
+      await writeText(file.path);
+    }
+  };
 
   const handleOpenFile = async () => {
     try {
@@ -18,8 +26,38 @@ export default function Header() {
         directory: false,
       });
       if (selected && typeof selected === "string") {
-        const content = await readTextFile(selected);
         const name = selected.split(/[/\\]/).pop() || "unknown";
+
+        // Check if binary file
+        if (isBinaryFile(name)) {
+          setFile({
+            name,
+            path: selected,
+            content: "二进制文件不支持预览",
+            type: "unsupported",
+          });
+          setFolder({ rootPath: null, tree: [], selectedPath: null });
+          return;
+        }
+
+        // Check file size
+        try {
+          const fileMeta = await stat(selected);
+          if (isFileTooLarge(Number(fileMeta.size))) {
+            setFile({
+              name,
+              path: selected,
+              content: `文件过大 (${formatFileSize(Number(fileMeta.size))})，不支持预览`,
+              type: "unsupported",
+            });
+            setFolder({ rootPath: null, tree: [], selectedPath: null });
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to get file metadata:", err);
+        }
+
+        const content = await readTextFile(selected);
         setFile({
           name,
           path: selected,
@@ -74,6 +112,13 @@ export default function Header() {
             <span className="text-sm text-text-secondary truncate max-w-md" title={file.path}>
               {file.name}
             </span>
+            <button
+              onClick={copyFilePath}
+              className="p-1 text-text-muted hover:text-text-primary transition-colors"
+              title="复制文件路径"
+            >
+              <Copy size={14} />
+            </button>
           </>
         )}
       </div>
