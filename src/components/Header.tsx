@@ -2,11 +2,11 @@ import { useState } from "react";
 import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText, Copy } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import { detectFileType } from "@/utils/fileTypes";
 import { buildFileTree } from "@/utils/fileTree";
-import { isBinaryFile, isFileTooLarge, formatFileSize } from "@/utils/fileUtils";
+import { isBinaryFile } from "@/utils/fileUtils";
 import About from "./About";
 
 export default function Header() {
@@ -38,23 +38,6 @@ export default function Header() {
           });
           setFolder({ rootPath: null, tree: [], selectedPath: null });
           return;
-        }
-
-        // Check file size
-        try {
-          const fileMeta = await stat(selected);
-          if (isFileTooLarge(Number(fileMeta.size))) {
-            setFile({
-              name,
-              path: selected,
-              content: `文件过大 (${formatFileSize(Number(fileMeta.size))})，不支持预览`,
-              type: "unsupported",
-            });
-            setFolder({ rootPath: null, tree: [], selectedPath: null });
-            return;
-          }
-        } catch (err) {
-          console.error("Failed to get file metadata:", err);
         }
 
         const content = await readTextFile(selected);

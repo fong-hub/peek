@@ -10,13 +10,13 @@ import {
   Clock,
   Trash2,
 } from "lucide-react";
-import { readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import type { TreeNode, RecentItem } from "@/store/useStore";
 import { detectFileType } from "@/utils/fileTypes";
 import { getRecentItems, removeRecentItem } from "@/utils/recent";
 import { buildFileTree } from "@/utils/fileTree";
-import { isBinaryFile, isFileTooLarge, formatFileSize } from "@/utils/fileUtils";
+import { isBinaryFile } from "@/utils/fileUtils";
 import ContextMenu from "./ContextMenu";
 
 type SidebarTab = "files" | "recent";
@@ -36,36 +36,21 @@ function TreeItem({ node, depth = 0 }: TreeItemProps) {
       toggleNodeExpanded(node.path);
     } else {
       setSelectedPath(node.path);
+      // 检查是否是二进制文件
+      if (isBinaryFile(node.name)) {
+        setFile(
+          {
+            name: node.name,
+            path: node.path,
+            content: "二进制文件不支持预览",
+            type: "unsupported",
+          },
+          false
+        );
+        return;
+      }
+
       try {
-        // 检查是否是二进制文件
-        if (isBinaryFile(node.name)) {
-          setFile(
-            {
-              name: node.name,
-              path: node.path,
-              content: "二进制文件不支持预览",
-              type: "unsupported",
-            },
-            false
-          );
-          return;
-        }
-
-        // 检查文件大小
-        const fileMeta = await stat(node.path);
-        if (isFileTooLarge(Number(fileMeta.size))) {
-          setFile(
-            {
-              name: node.name,
-              path: node.path,
-              content: `文件过大 (${formatFileSize(Number(fileMeta.size))})，不支持预览`,
-              type: "unsupported",
-            },
-            false
-          );
-          return;
-        }
-
         const content = await readTextFile(node.path);
         // 文件夹内点击文件不添加到最近记录
         setFile(
@@ -207,23 +192,6 @@ function RecentPanel() {
           });
           setFolder({ rootPath: null, tree: [], selectedPath: null });
           return;
-        }
-
-        // Check file size
-        try {
-          const fileMeta = await stat(item.path);
-          if (isFileTooLarge(Number(fileMeta.size))) {
-            setFile({
-              name: item.name,
-              path: item.path,
-              content: `文件过大 (${formatFileSize(Number(fileMeta.size))})，不支持预览`,
-              type: "unsupported",
-            });
-            setFolder({ rootPath: null, tree: [], selectedPath: null });
-            return;
-          }
-        } catch (err) {
-          console.error("Failed to get file metadata:", err);
         }
 
         const content = await readTextFile(item.path);
