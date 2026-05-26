@@ -97,11 +97,11 @@ export default function HtmlPreviewer({ content }: Props) {
           源码
         </button>
       </div>
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 relative">
         {mode === "preview" ? (
           <iframe
             ref={iframeRef}
-            className="w-full h-full border-none bg-white"
+            className="absolute inset-0 w-full h-full border-none bg-white"
             sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-top-navigation-by-user-activation"
           />
         ) : (
