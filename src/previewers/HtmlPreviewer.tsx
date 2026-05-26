@@ -6,6 +6,26 @@ interface Props {
   content: string;
 }
 
+// 注入到 iframe 中的脚本，用于拦截链接点击
+const LINK_INTERCEPT_SCRIPT = `
+<script>
+(function() {
+  document.addEventListener('click', function(e) {
+    var el = e.target;
+    while (el && el !== document.body) {
+      if (el.tagName === 'A' && el.href) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(el.href, '_blank');
+        return false;
+      }
+      el = el.parentElement;
+    }
+  }, true);
+})();
+</script>
+`;
+
 export default function HtmlPreviewer({ content }: Props) {
   const { file } = useStore();
   const [mode, setMode] = useState<"preview" | "source">("preview");
@@ -27,12 +47,21 @@ export default function HtmlPreviewer({ content }: Props) {
 
           // 在head标签后插入base标签，如果没有head则在html后插入
           if (processedContent.includes("<head>")) {
-            processedContent = processedContent.replace("<head>", `<head>${baseTag}`);
+            processedContent = processedContent.replace("<head>", `<head>\${baseTag}`);
           } else if (processedContent.includes("<html>")) {
-            processedContent = processedContent.replace("<html>", `<html><head>${baseTag}</head>`);
+            processedContent = processedContent.replace("<html>", `<html><head>\${baseTag}</head>`);
           } else {
             processedContent = baseTag + processedContent;
           }
+        }
+
+        // 在 </body> 前或 </html> 前注入链接拦截脚本
+        if (processedContent.includes("</body>")) {
+          processedContent = processedContent.replace("</body>", `\${LINK_INTERCEPT_SCRIPT}</body>`);
+        } else if (processedContent.includes("</html>")) {
+          processedContent = processedContent.replace("</html>", `\${LINK_INTERCEPT_SCRIPT}</html>`);
+        } else {
+          processedContent += LINK_INTERCEPT_SCRIPT;
         }
 
         doc.open();
@@ -47,7 +76,7 @@ export default function HtmlPreviewer({ content }: Props) {
       <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-bg-secondary">
         <button
           onClick={() => setMode("preview")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors \${
             mode === "preview"
               ? "bg-accent text-white"
               : "text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
@@ -58,7 +87,7 @@ export default function HtmlPreviewer({ content }: Props) {
         </button>
         <button
           onClick={() => setMode("source")}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors \${
             mode === "source"
               ? "bg-accent text-white"
               : "text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
@@ -73,7 +102,7 @@ export default function HtmlPreviewer({ content }: Props) {
           <iframe
             ref={iframeRef}
             className="w-full h-full border-none bg-white"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-top-navigation-by-user-activation"
           />
         ) : (
           <div className="font-mono text-sm leading-relaxed">
