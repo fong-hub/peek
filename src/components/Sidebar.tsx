@@ -159,7 +159,7 @@ function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
   return result;
 }
 
-function RecentPanel() {
+function RecentPanel({ onOpenFolder }: { onOpenFolder?: () => void }) {
   const { setFile, setFolder } = useStore();
   const [recents, setRecents] = useState<RecentItem[]>([]);
 
@@ -181,6 +181,7 @@ function RecentPanel() {
           selectedPath: null,
         });
         setFile(null);
+        onOpenFolder?.();
       } else {
         // Check if binary file
         if (isBinaryFile(item.name)) {
@@ -405,7 +406,7 @@ export default function Sidebar() {
           )}
         </>
       ) : (
-        <RecentPanel />
+        <RecentPanel onOpenFolder={() => setActiveTab("files")} />
       )}
 
       {/* 宽度调整手柄 */}
