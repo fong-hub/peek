@@ -2,9 +2,9 @@
   <img src="src-tauri/icons/icon.png" width="128" height="128" alt="Peek Logo">
 </p>
 
-# Peek — 极速文件预览器
+# Peek — 开发者文件预览器
 
-Peek 是一款基于 Tauri + React 的本地文件预览器，主打"零延迟"查看体验。无论是 Markdown 的美观渲染、JSON 的结构化展示，还是纯文本、日志等常见格式，Peek 都能在瞬间以最优雅的方式呈现。
+Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Markdown、JSON、HTML、代码、纯文本和日志等文本类内容的快速浏览体验。
 
 ## 技术栈
 
@@ -16,14 +16,17 @@ Peek 是一款基于 Tauri + React 的本地文件预览器，主打"零延迟"�
 
 ## 功能特性
 
-- ✅ **多格式支持**: Markdown、JSON、HTML、纯文本、日志文件
+- ✅ **多格式支持**: Markdown、JSON、HTML、代码、纯文本、日志文件
 - ✅ **文件夹浏览**: 左侧文件树，支持拖入文件夹浏览项目
 - ✅ **极速打开**: 系统对话框（Ctrl/Cmd + O）+ 拖拽打开
 - ✅ **智能识别**: 自动根据文件扩展名识别类型
 - ✅ **Markdown 渲染**: 完整支持 GFM 语法、代码高亮、表格
-- ✅ **JSON 折叠树**: 可展开/折叠的结构化浏览
+- ✅ **JSON 格式化展示**: 自动格式化并带行号预览
 - ✅ **HTML 双模式**: 渲染预览与源码查看一键切换
 - ✅ **日志高亮**: 行号展示，ERROR/WARN/INFO/DEBUG 级别颜色区分
+- ✅ **最近打开与恢复**: 支持最近记录、恢复上次工作区
+- ✅ **界面状态记忆**: 记住主题、侧边栏宽度、信息面板状态
+- ✅ **命令行路径打开**: 支持通过可执行文件参数直接打开文件或文件夹
 - ✅ **深色/浅色主题**: 一键切换，全程无闪烁
 - ✅ **快捷键**: Ctrl/Cmd + O 打开，ESC 关闭
 
@@ -92,6 +95,20 @@ npm run build
 npm run tauri:build
 ```
 
+## 命令行打开
+
+打包后的可执行文件支持直接传入路径参数，例如：
+
+```bash
+./src-tauri/target/release/peek /path/to/file-or-folder
+```
+
+如果你把可执行文件加入 `PATH`，也可以直接使用：
+
+```bash
+peek /path/to/file-or-folder
+```
+
 ## 打包产物
 
 | 平台 | 命令 | 输出路径 |
@@ -103,7 +120,6 @@ npm run tauri:build
 
 - [ ] 大文件虚拟滚动优化
 - [ ] 更多格式支持（CSV、YAML、XML）
-- [ ] 命令行支持 `peek <file>`
 - [ ] macOS QuickLook 扩展
 - [ ] 多标签页预览
 - [ ] 插件系统

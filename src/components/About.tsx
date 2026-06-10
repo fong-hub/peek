@@ -202,7 +202,7 @@ export default function About({ onClose }: AboutProps) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-text-primary">Peek</h2>
-              <p className="text-sm text-text-secondary">极速文件预览器</p>
+              <p className="text-sm text-text-secondary">开发者文件预览器</p>
               <div className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-0.5 rounded-full bg-bg-tertiary text-text-secondary text-xs">
                 <Tag size={10} />
                 v{appVersion}

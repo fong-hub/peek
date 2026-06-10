@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 #[derive(serde::Serialize)]
@@ -36,6 +37,30 @@ fn get_system_info() -> SystemInfo {
         arch,
         tauri_version,
     }
+}
+
+#[tauri::command]
+fn get_launch_paths() -> Vec<String> {
+    collect_launch_paths(std::env::args_os().skip(1))
+}
+
+fn collect_launch_paths<I>(args: I) -> Vec<String>
+where
+    I: IntoIterator<Item = OsString>,
+{
+    args.into_iter()
+        .filter_map(|arg| {
+            let path = PathBuf::from(arg);
+            if !path.exists() {
+                return None;
+            }
+
+            path.canonicalize()
+                .ok()
+                .or(Some(path))
+                .map(|p| p.to_string_lossy().to_string())
+        })
+        .collect()
 }
 
 // 打开文件或目录（不受shell scope限制）
@@ -80,7 +105,39 @@ fn main() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![open_path, get_system_info])
+        .invoke_handler(tauri::generate_handler![open_path, get_system_info, get_launch_paths])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_launch_paths;
+    use std::ffi::OsString;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn collect_launch_paths_filters_missing_entries() {
+        let file_path = create_temp_file();
+        let result = collect_launch_paths(vec![
+            OsString::from("/path/does/not/exist"),
+            file_path.clone().into_os_string(),
+        ]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], fs::canonicalize(&file_path).unwrap().to_string_lossy());
+
+        let _ = fs::remove_file(file_path);
+    }
+
+    fn create_temp_file() -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("peek-launch-path-{unique}.txt"));
+        fs::write(&path, "peek").unwrap();
+        path
+    }
 }

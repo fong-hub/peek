@@ -7,31 +7,22 @@ VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
   echo "❌ 请提供版本号"
   echo "用法: ./scripts/release.sh <version>"
-  echo "示例: ./scripts/release.sh 1.0.0-beta.5"
+  echo "示例: ./scripts/release.sh 1.1.0"
   exit 1
 fi
 
-# 检查当前分支
 BRANCH=$(git branch --show-current)
 if [ "$BRANCH" != "main" ]; then
-  echo "⚠️  当前分支是 $BRANCH，建议切换到 main 分支发布"
-  read -p "是否继续? (y/N): " confirm
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    exit 1
-  fi
+  echo "❌ 当前分支是 $BRANCH，请切换到 main 后再发布"
+  exit 1
 fi
 
-# 检查工作区是否干净
 if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "⚠️  工作区有未提交的更改:"
+  echo "❌ 工作区有未提交的更改，请先提交后再执行 release 脚本"
   git status --short
-  read -p "是否继续? (y/N): " confirm
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    exit 1
-  fi
+  exit 1
 fi
 
-# 检查 gh CLI
 if ! command -v gh &> /dev/null; then
   echo "❌ 请先安装 GitHub CLI (gh)"
   echo "   macOS: brew install gh"
@@ -46,95 +37,92 @@ if ! gh auth status &> /dev/null; then
 fi
 
 REPO="fong-hub/peek"
+TAG="v${VERSION}"
+BUNDLE_DIR="src-tauri/target/release/bundle"
+
+collect_assets() {
+  local pattern
+  ASSETS=()
+  local -a patterns=(
+    "*.dmg"
+    "*.app.tar.gz"
+    "*.msi"
+    "*.msi.zip"
+    "*-setup.exe"
+    "*-setup.exe.zip"
+  )
+
+  for pattern in "${patterns[@]}"; do
+    while IFS= read -r asset; do
+      [ -n "$asset" ] && ASSETS+=("$asset")
+    done < <(find "$BUNDLE_DIR" -type f -name "$pattern" | sort)
+  done
+}
+
 echo ""
 echo "🚀 开始发布 Peek v${VERSION}"
 echo "========================================"
 
-# 1. 同步版本号
 echo ""
 echo "📝 步骤 1/6: 同步版本号..."
 node scripts/sync-version.js "$VERSION"
 
-# 2. 提交版本更新
 echo ""
 echo "📝 步骤 2/6: 提交版本更新..."
 git add -A
-git commit -m "chore: bump version to ${VERSION}" || echo "⚠️  没有需要提交的更改"
+git commit -m "chore: release v${VERSION}" || echo "⚠️  没有需要提交的更改"
 
-# 3. 创建 tag
 echo ""
-echo "🏷️  步骤 3/6: 创建 tag v${VERSION}..."
-git tag -a "v${VERSION}" -m "Release v${VERSION}" || {
-  echo "⚠️  tag v${VERSION} 已存在，是否强制更新? (y/N)"
-  read -r confirm
-  if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    git tag -fa "v${VERSION}" -m "Release v${VERSION}"
-  fi
-}
-
-# 4. 推送到远程
-echo ""
-echo "🌐 步骤 4/6: 推送到远程..."
-git push origin "$(git branch --show-current)"
-git push origin "v${VERSION}"
-
-# 5. 构建
-echo ""
-echo "🔨 步骤 5/6: 构建 Release..."
+echo "🔨 步骤 3/6: 构建 Release..."
 ./scripts/build-release.sh
 
-# 6. 创建 GitHub Release 并上传
 echo ""
-echo "📤 步骤 6/6: 创建 GitHub Release 并上传..."
-
-# 检测构建产物
-BUNDLE_DIR="src-tauri/target/release/bundle"
-ASSETS=()
-
-# macOS DMG
-for f in "$BUNDLE_DIR"/dmg/*.dmg; do
-  [ -f "$f" ] && ASSETS+=("$f")
-done
-
-# macOS App (通常不需要单独上传，DMG 已包含)
-# Windows MSI
-for f in "$BUNDLE_DIR"/msi/*.msi; do
-  [ -f "$f" ] && ASSETS+=("$f")
-done
+echo "📦 收集构建产物..."
+collect_assets
 
 if [ ${#ASSETS[@]} -eq 0 ]; then
-  echo "⚠️  未找到构建产物，跳过上传"
-else
-  echo "📦 找到的构建产物:"
-  for f in "${ASSETS[@]}"; do
-    echo "   - $(basename "$f")"
-  done
+  echo "❌ 未找到可上传的构建产物"
+  exit 1
+fi
 
-  # 创建 Release
-  gh release create "v${VERSION}" \
+for asset in "${ASSETS[@]}"; do
+  echo "   - $(basename "$asset")"
+done
+
+echo ""
+echo "📄 步骤 4/6: 生成 latest.json..."
+node scripts/generate-latest-json.js "$VERSION" "${ASSETS[@]}"
+
+echo ""
+echo "🏷️  步骤 5/6: 创建并推送 tag..."
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  git tag -fa "$TAG" -m "Release ${TAG}"
+else
+  git tag -a "$TAG" -m "Release ${TAG}"
+fi
+
+git push origin "$BRANCH"
+git push origin "refs/tags/${TAG}" --force
+
+echo ""
+echo "📤 步骤 6/6: 创建 GitHub Release 并上传..."
+if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+  gh release upload "$TAG" "${ASSETS[@]}" latest.json --repo "$REPO" --clobber
+else
+  gh release create "$TAG" \
     --repo "$REPO" \
     --title "Peek v${VERSION}" \
     --generate-notes \
-    "${ASSETS[@]}"
-
-  echo ""
-  echo "✅ GitHub Release 创建成功!"
+    "${ASSETS[@]}" \
+    latest.json
 fi
 
-# 生成并上传 latest.json
 echo ""
-echo "📄 生成 latest.json..."
-node scripts/generate-latest-json.js "$VERSION" "${ASSETS[@]}"
-
-if [ -f "latest.json" ]; then
-  echo "📤 上传 latest.json..."
-  gh release upload "v${VERSION}" latest.json --repo "$REPO" --clobber
-  echo "✅ latest.json 已上传"
-fi
+echo "✅ GitHub Release 已更新"
 
 echo ""
 echo "========================================"
 echo "🎉 Peek v${VERSION} 发布完成!"
 echo ""
-echo "🔗 Release 页面: https://github.com/${REPO}/releases/tag/v${VERSION}"
+echo "🔗 Release 页面: https://github.com/${REPO}/releases/tag/${TAG}"
 echo "========================================"

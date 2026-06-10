@@ -1,17 +1,50 @@
 import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import FileDropZone from "@/components/FileDropZone";
 import PreviewContainer from "@/components/PreviewContainer";
 import { useStore } from "@/store/useStore";
-import { detectFileType } from "@/utils/fileTypes";
-import { buildFileTree } from "@/utils/fileTree";
-import { isBinaryFile } from "@/utils/fileUtils";
+import { openPreviewPath, restoreSession } from "@/utils/openPreview";
+import { getCurrentSession, isEmptySession } from "@/utils/session";
+
+let appBootstrapped = false;
 
 export default function App() {
   const { file, setFile, setFolder, setSelectedPath } = useStore();
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", useStore.getState().theme);
+  }, []);
+
+  useEffect(() => {
+    if (appBootstrapped) return;
+    appBootstrapped = true;
+
+    const bootstrapApp = async () => {
+      try {
+        const launchPaths = await invoke<string[]>("get_launch_paths");
+        if (launchPaths.length > 0) {
+          await openPreviewPath(launchPaths[0], { addToRecent: true });
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to read launch paths:", error);
+      }
+
+      const currentSession = getCurrentSession();
+      if (!isEmptySession(currentSession)) {
+        try {
+          await restoreSession(currentSession);
+        } catch (error) {
+          console.error("Failed to restore previous session:", error);
+        }
+      }
+    };
+
+    void bootstrapApp();
+  }, []);
 
   // Tauri native drag-drop event handler
   useEffect(() => {
@@ -19,75 +52,10 @@ export default function App() {
 
     const setupDragDrop = async () => {
       unlisten = await getCurrentWindow().onDragDropEvent(async (event: any) => {
-        console.log("[DEBUG] DragDrop event:", event.payload.type, event.payload.paths);
         if (event.payload.type === "drop") {
           const paths = event.payload.paths;
           if (paths.length === 0) return;
-
-          const droppedPath = paths[0];
-          console.log("[DEBUG] Dropped path:", droppedPath);
-
-          // Try to treat as directory first
-          try {
-            const tree = await buildFileTree(droppedPath);
-            console.log("[DEBUG] Folder tree loaded, items:", tree.length);
-            setFolder({
-              rootPath: droppedPath,
-              tree,
-              selectedPath: null,
-            });
-            setFile(null);
-            return;
-          } catch (err) {
-            console.log("[DEBUG] Not a directory or empty:", err);
-          }
-
-          // Treat as single file
-          const name = droppedPath.split(/[/\\]/).pop() || "unknown";
-
-          // Check if binary file
-          if (isBinaryFile(name)) {
-            setFile({
-              name,
-              path: droppedPath,
-              content: "二进制文件不支持预览",
-              type: "unsupported",
-            });
-            setFolder({
-              rootPath: null,
-              tree: [],
-              selectedPath: null,
-            });
-            return;
-          }
-
-          try {
-            const content = await readTextFile(droppedPath);
-            setFile({
-              name,
-              path: droppedPath,
-              content,
-              type: detectFileType(name),
-            });
-            setFolder({
-              rootPath: null,
-              tree: [],
-              selectedPath: null,
-            });
-          } catch (err) {
-            console.error("[DEBUG] Failed to read dropped file:", err);
-            setFile({
-              name,
-              path: droppedPath,
-              content: "文件读取失败，可能是二进制文件或权限问题",
-              type: "unsupported",
-            });
-            setFolder({
-              rootPath: null,
-              tree: [],
-              selectedPath: null,
-            });
-          }
+          await openPreviewPath(paths[0]);
         }
       });
     };
@@ -107,7 +75,7 @@ export default function App() {
       }
       if (e.key === "Escape" && file) {
         e.preventDefault();
-        setFile(null);
+        setFile(null, false);
         setSelectedPath(null);
       }
     };

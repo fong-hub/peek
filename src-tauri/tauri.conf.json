@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Peek",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "identifier": "com.peek.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Peek - 极速文件预览器",
+        "title": "Peek - 开发者文件预览器",
         "width": 1200,
         "height": 800,
         "minWidth": 600,
@@ -38,12 +38,13 @@
       "endpoints": [
         "https://github.com/fong-hub/peek/releases/latest/download/latest.json"
       ],
-      "pubkey": "RWQSXF7R2/uuryHvZlt+bBfAn5hFSYsV/JqcH/S+5Op8jUTrutHuMb0d",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgQUZBRUZCREJEMTVFNUMxMgpSV1FTWEY3UjIvdXVyeUh2Wmx0K2JCZkFuNWhGU1lzVi9KcWNIL1MrNU9wOGpVVHJ1dEh1TWIwZAo=",
       "signature": true
     }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "app",
       "dmg",

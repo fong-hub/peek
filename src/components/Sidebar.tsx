@@ -10,13 +10,11 @@ import {
   Clock,
   Trash2,
 } from "lucide-react";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { exists } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import type { TreeNode, RecentItem } from "@/store/useStore";
-import { detectFileType } from "@/utils/fileTypes";
 import { getRecentItems, removeRecentItem } from "@/utils/recent";
-import { buildFileTree } from "@/utils/fileTree";
-import { isBinaryFile } from "@/utils/fileUtils";
+import { openFileInCurrentFolder, openFolderWorkspace, openStandaloneFile } from "@/utils/openPreview";
 import ContextMenu from "./ContextMenu";
 
 type SidebarTab = "files" | "recent";
@@ -35,44 +33,11 @@ function TreeItem({ node, depth = 0 }: TreeItemProps) {
     if (node.isDirectory) {
       toggleNodeExpanded(node.path);
     } else {
-      setSelectedPath(node.path);
-      // 检查是否是二进制文件
-      if (isBinaryFile(node.name)) {
-        setFile(
-          {
-            name: node.name,
-            path: node.path,
-            content: "二进制文件不支持预览",
-            type: "unsupported",
-          },
-          false
-        );
-        return;
-      }
-
       try {
-        const content = await readTextFile(node.path);
-        // 文件夹内点击文件不添加到最近记录
-        setFile(
-          {
-            name: node.name,
-            path: node.path,
-            content,
-            type: detectFileType(node.name),
-          },
-          false
-        );
+        setSelectedPath(node.path);
+        await openFileInCurrentFolder(node.path);
       } catch (err) {
         console.error("Failed to read file:", node.path, err);
-        setFile(
-          {
-            name: node.name,
-            path: node.path,
-            content: "文件读取失败，可能是二进制文件或权限问题",
-            type: "unsupported",
-          },
-          false
-        );
       }
     }
   };
@@ -160,8 +125,8 @@ function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
 }
 
 function RecentPanel({ onOpenFolder }: { onOpenFolder?: () => void }) {
-  const { setFile, setFolder } = useStore();
   const [recents, setRecents] = useState<RecentItem[]>([]);
+  const [missingPath, setMissingPath] = useState<string | null>(null);
 
   const refreshRecents = useCallback(() => {
     setRecents(getRecentItems());
@@ -173,46 +138,23 @@ function RecentPanel({ onOpenFolder }: { onOpenFolder?: () => void }) {
 
   const handleOpenRecent = async (item: RecentItem) => {
     try {
+      const pathExists = await exists(item.path);
+      if (!pathExists) {
+        removeRecentItem(item.path);
+        refreshRecents();
+        setMissingPath(item.path);
+        return;
+      }
+
+      setMissingPath(null);
       if (item.isDirectory) {
-        const tree = await buildFileTree(item.path);
-        setFolder({
-          rootPath: item.path,
-          tree,
-          selectedPath: null,
-        });
-        setFile(null);
+        await openFolderWorkspace(item.path);
         onOpenFolder?.();
       } else {
-        // Check if binary file
-        if (isBinaryFile(item.name)) {
-          setFile({
-            name: item.name,
-            path: item.path,
-            content: "二进制文件不支持预览",
-            type: "unsupported",
-          });
-          setFolder({ rootPath: null, tree: [], selectedPath: null });
-          return;
-        }
-
-        const content = await readTextFile(item.path);
-        setFile({
-          name: item.name,
-          path: item.path,
-          content,
-          type: detectFileType(item.name),
-        });
-        setFolder({ rootPath: null, tree: [], selectedPath: null });
+        await openStandaloneFile(item.path);
       }
     } catch (err) {
       console.error("打开最近项失败:", err);
-      setFile({
-        name: item.name,
-        path: item.path,
-        content: "文件读取失败，可能是二进制文件或权限问题",
-        type: "unsupported",
-      });
-      setFolder({ rootPath: null, tree: [], selectedPath: null });
     }
   };
 
@@ -232,6 +174,11 @@ function RecentPanel({ onOpenFolder }: { onOpenFolder?: () => void }) {
 
   return (
     <div className="flex-1 overflow-auto py-2 px-1">
+      {missingPath && (
+        <div className="mx-2 mb-2 rounded-md border border-error/20 bg-error/10 px-2 py-1.5 text-[11px] text-error">
+          路径已失效，已从最近记录移除
+        </div>
+      )}
       {recents.map((item) => (
         <div
           key={item.path}

@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText, Copy } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
-import { detectFileType } from "@/utils/fileTypes";
-import { buildFileTree } from "@/utils/fileTree";
-import { isBinaryFile } from "@/utils/fileUtils";
+import { openFileDialog, openFolderDialog } from "@/utils/openPreview";
 import About from "./About";
 
 export default function Header() {
@@ -21,35 +17,7 @@ export default function Header() {
 
   const handleOpenFile = async () => {
     try {
-      const selected = await open({
-        multiple: false,
-        directory: false,
-      });
-      if (selected && typeof selected === "string") {
-        const name = selected.split(/[/\\]/).pop() || "unknown";
-
-        // Check if binary file
-        if (isBinaryFile(name)) {
-          setFile({
-            name,
-            path: selected,
-            content: "二进制文件不支持预览",
-            type: "unsupported",
-          });
-          setFolder({ rootPath: null, tree: [], selectedPath: null });
-          return;
-        }
-
-        const content = await readTextFile(selected);
-        setFile({
-          name,
-          path: selected,
-          content,
-          type: detectFileType(name),
-        });
-        // Clear folder state
-        setFolder({ rootPath: null, tree: [], selectedPath: null });
-      }
+      await openFileDialog();
     } catch (err) {
       console.error("Failed to open file:", err);
     }
@@ -57,19 +25,7 @@ export default function Header() {
 
   const handleOpenFolder = async () => {
     try {
-      const selected = await open({
-        multiple: false,
-        directory: true,
-      });
-      if (selected && typeof selected === "string") {
-        const tree = await buildFileTree(selected);
-        setFolder({
-          rootPath: selected,
-          tree,
-          selectedPath: null,
-        });
-        setFile(null);
-      }
+      await openFolderDialog();
     } catch (err) {
       console.error("Failed to open folder:", err);
     }

@@ -51,14 +51,26 @@ if (fs.existsSync(latestExamplePath)) {
   latestJson.pub_date = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const repoUrl = "https://github.com/fong-hub/peek";
   const platforms = latestJson.platforms || {};
+  const exampleAssets = {
+    "darwin-aarch64": "Peek.app.tar.gz",
+    "darwin-aarch64-app": "Peek.app.tar.gz",
+    "darwin-x86_64": "Peek.app.tar.gz",
+    "darwin-x86_64-app": "Peek.app.tar.gz",
+    "windows-x86_64": `Peek_${version}_x64.msi.zip`,
+    "windows-x86_64-msi": `Peek_${version}_x64.msi.zip`,
+    "windows-aarch64": `Peek_${version}_aarch64.msi.zip`,
+    "windows-aarch64-msi": `Peek_${version}_aarch64.msi.zip`,
+  };
+
   for (const key of Object.keys(platforms)) {
-    const ext = key.startsWith("windows") ? "msi" : "dmg";
-    const archLabel = key.includes("aarch64") ? "aarch64" : key.includes("x86_64") ? "x64" : "universal";
-    platforms[key].url = `${repoUrl}/releases/download/v${version}/Peek_${version}_${archLabel}.${ext}`;
+    const assetName = exampleAssets[key];
+    if (assetName) {
+      platforms[key].url = `${repoUrl}/releases/download/v${version}/${assetName}`;
+    }
   }
   fs.writeFileSync(latestExamplePath, JSON.stringify(latestJson, null, 2) + "\n");
   console.log(`✅ latest.json.example: ${version}`);
 }
 
 console.log(`\n🎉 版本号已同步为 ${version}`);
-console.log("💡 提示: 如果需要更新 latest.json 中的签名(signature)，请手动修改。");
+console.log("💡 提示: latest.json.example 中的签名(signature)仍然是占位值。");
