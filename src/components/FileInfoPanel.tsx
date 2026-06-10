@@ -1,25 +1,10 @@
 import { FileText, Copy, Calendar, Hash, FolderOpen, ExternalLink } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { invoke } from "@tauri-apps/api/core";
+import { formatFileSize } from "@/utils/fileUtils";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-function formatTimestamp(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleString("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+function supportsTextStats(type: string): boolean {
+  return type !== "image" && type !== "pdf" && type !== "unsupported";
 }
 
 export default function FileInfoPanel() {
@@ -27,9 +12,10 @@ export default function FileInfoPanel() {
 
   if (!file || !infoPanelVisible) return null;
 
-  const lineCount = file.content.split("\n").length;
-  const charCount = file.content.length;
-  const byteCount = new Blob([file.content]).size;
+  const showTextStats = supportsTextStats(file.type);
+  const lineCount = showTextStats ? file.content.split("\n").length : 0;
+  const charCount = showTextStats ? file.content.length : 0;
+  const byteCount = file.previewMeta?.sizeBytes ?? new Blob([file.content]).size;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).catch(console.error);
@@ -89,16 +75,28 @@ export default function FileInfoPanel() {
           </div>
 
           {/* 文件统计 */}
-          <div className="flex items-center gap-4 text-xs text-text-muted">
+            <div className="flex items-center gap-4 text-xs text-text-muted">
+            {showTextStats && (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <Hash size={12} />
+                  <span>
+                    {file.previewMeta?.isLargeFile
+                      ? `预览 ${lineCount} 行`
+                      : `${lineCount} 行`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span>
+                    {file.previewMeta?.isLargeFile
+                      ? `预览 ${charCount} 字符`
+                      : `${charCount} 字符`}
+                  </span>
+                </div>
+              </>
+            )}
             <div className="flex items-center gap-1.5">
-              <Hash size={12} />
-              <span>{lineCount} 行</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span>{charCount} 字符</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span>{formatBytes(byteCount)}</span>
+              <span>{formatFileSize(byteCount)}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span>类型: {file.type.toUpperCase()}</span>

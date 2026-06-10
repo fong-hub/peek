@@ -8,13 +8,32 @@ import {
   type SessionSnapshot,
 } from "@/utils/session";
 
-export type PreviewType = "markdown" | "json" | "text" | "html" | "log" | "unknown" | "unsupported";
+export type PreviewType =
+  | "markdown"
+  | "json"
+  | "text"
+  | "html"
+  | "log"
+  | "csv"
+  | "image"
+  | "pdf"
+  | "unknown"
+  | "unsupported";
+
+export interface FilePreviewMeta {
+  sizeBytes?: number;
+  previewedBytes?: number;
+  previewedLineCount?: number;
+  isLargeFile?: boolean;
+  isTruncated?: boolean;
+}
 
 export interface FileInfo {
   name: string;
   path: string;
   content: string;
   type: PreviewType;
+  previewMeta?: FilePreviewMeta;
 }
 
 export interface RecentItem {
@@ -30,6 +49,7 @@ export interface TreeNode {
   isDirectory: boolean;
   children: TreeNode[];
   expanded?: boolean;
+  childrenLoaded?: boolean;
 }
 
 export interface FolderState {
@@ -48,6 +68,8 @@ interface Store {
   infoPanelVisible: boolean;
   setFile: (file: FileInfo | null, addToRecent?: boolean) => void;
   setFolder: (folder: FolderState, addToRecent?: boolean) => void;
+  setFolderTree: (tree: TreeNode[]) => void;
+  setNodeChildren: (path: string, children: TreeNode[]) => void;
   setIsDragging: (dragging: boolean) => void;
   toggleTheme: () => void;
   toggleSidebar: () => void;
@@ -121,6 +143,39 @@ export const useStore = create<Store>((set) => ({
       return { folder };
     });
   },
+  setFolderTree: (tree) =>
+    set((state) => ({
+      folder: { ...state.folder, tree },
+    })),
+  setNodeChildren: (path, children) =>
+    set((state) => {
+      const updateTree = (nodes: TreeNode[]): TreeNode[] =>
+        nodes.map((node) => {
+          if (node.path === path) {
+            return {
+              ...node,
+              children,
+              childrenLoaded: true,
+            };
+          }
+
+          if (node.children.length > 0) {
+            return {
+              ...node,
+              children: updateTree(node.children),
+            };
+          }
+
+          return node;
+        });
+
+      return {
+        folder: {
+          ...state.folder,
+          tree: updateTree(state.folder.tree),
+        },
+      };
+    }),
   setIsDragging: (isDragging) => set({ isDragging }),
   toggleTheme: () =>
     set((state) => {

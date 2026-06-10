@@ -7,6 +7,9 @@ const SUPPORTED_EXTENSIONS = new Set([
   "html", "htm",
   "log",
   "txt",
+  "csv",
+  "pdf",
+  "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp",
   "js", "ts", "jsx", "tsx",
   "py", "rs", "go", "java", "c", "cpp", "h", "hpp", "cs", "rb", "php", "swift", "kt",
   "sh", "bash", "zsh",
@@ -16,70 +19,134 @@ const SUPPORTED_EXTENSIONS = new Set([
   "dockerfile",
 ]);
 
-function isSupportedFile(name: string): boolean {
+export function isSupportedFile(name: string): boolean {
   const ext = name.split(".").pop()?.toLowerCase() || "";
   return SUPPORTED_EXTENSIONS.has(ext);
 }
 
-// Normalize path to handle both Windows and Unix paths
-function joinPath(dir: string, name: string): string {
-  // Remove trailing slashes from directory path
+export function joinPath(dir: string, name: string): string {
   const cleanDir = dir.replace(/[/\\]$/, "");
-  // Check if directory already ends with a drive letter (Windows)
   if (/^[A-Za-z]:$/.test(cleanDir)) {
     return cleanDir + "\\" + name;
   }
-  // Use the same separator as the input directory
+
   const separator = dir.includes("\\") ? "\\" : "/";
   return cleanDir + separator + name;
 }
 
-export async function buildFileTree(dirPath: string): Promise<TreeNode[]> {
-  try {
-    const entries = await readDir(dirPath);
-    const nodes: TreeNode[] = [];
+function sortTreeNodes(nodes: TreeNode[]): TreeNode[] {
+  return nodes.sort((a, b) => {
+    if (a.isDirectory && !b.isDirectory) return -1;
+    if (!a.isDirectory && b.isDirectory) return 1;
+    return a.name.localeCompare(b.name);
+  });
+}
 
-    for (const entry of entries) {
-      const fullPath = joinPath(dirPath, entry.name);
-      if (entry.isDirectory) {
-        try {
-          const children = await buildFileTree(fullPath);
-          // Only include directories that contain supported files (recursively)
-          const hasSupportedFiles = (children: TreeNode[]): boolean =>
-            children.some((c) => !c.isDirectory || hasSupportedFiles(c.children));
-          if (hasSupportedFiles(children)) {
-            nodes.push({
-              name: entry.name,
-              path: fullPath,
-              isDirectory: true,
-              children,
-              expanded: false,
-            });
-          }
-        } catch (err) {
-          // Skip directories we can't access (permission denied, etc.)
-          console.warn(`Cannot access directory ${fullPath}:`, err);
-        }
-      } else if (isSupportedFile(entry.name)) {
-        nodes.push({
-          name: entry.name,
-          path: fullPath,
-          isDirectory: false,
-          children: [],
-        });
-      }
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+export function getRelativePathSegments(
+  rootPath: string,
+  targetPath: string
+): string[] {
+  const normalizedRoot = normalizePath(rootPath);
+  const normalizedTarget = normalizePath(targetPath);
+
+  if (normalizedTarget === normalizedRoot) {
+    return [];
+  }
+
+  if (!normalizedTarget.startsWith(`${normalizedRoot}/`)) {
+    return [];
+  }
+
+  return normalizedTarget
+    .slice(normalizedRoot.length + 1)
+    .split("/")
+    .filter(Boolean);
+}
+
+export async function listDirectoryNodes(dirPath: string): Promise<TreeNode[]> {
+  const entries = await readDir(dirPath);
+  const nodes: TreeNode[] = [];
+
+  for (const entry of entries) {
+    const fullPath = joinPath(dirPath, entry.name);
+
+    if (entry.isDirectory) {
+      nodes.push({
+        name: entry.name,
+        path: fullPath,
+        isDirectory: true,
+        children: [],
+        expanded: false,
+        childrenLoaded: false,
+      });
+      continue;
     }
 
-    // Sort: directories first, then files, both alphabetically
-    nodes.sort((a, b) => {
-      if (a.isDirectory && !b.isDirectory) return -1;
-      if (!a.isDirectory && b.isDirectory) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    if (!isSupportedFile(entry.name)) {
+      continue;
+    }
 
-    return nodes;
-  } catch (err) {
-    console.error(`Failed to build file tree for ${dirPath}:`, err);
-    throw err;
+    nodes.push({
+      name: entry.name,
+      path: fullPath,
+      isDirectory: false,
+      children: [],
+    });
   }
+
+  return sortTreeNodes(nodes);
+}
+
+async function expandTreeAlongPath(
+  nodes: TreeNode[],
+  currentDir: string,
+  segments: string[]
+): Promise<TreeNode[]> {
+  if (segments.length === 0) {
+    return nodes;
+  }
+
+  const [nextSegment, ...restSegments] = segments;
+  const nextPath = joinPath(currentDir, nextSegment);
+
+  return Promise.all(
+    nodes.map(async (node) => {
+      if (node.path !== nextPath || !node.isDirectory) {
+        return node;
+      }
+
+      const children = node.childrenLoaded
+        ? node.children
+        : await listDirectoryNodes(node.path);
+      const expandedChildren = await expandTreeAlongPath(
+        children,
+        node.path,
+        restSegments
+      );
+
+      return {
+        ...node,
+        expanded: true,
+        childrenLoaded: true,
+        children: expandedChildren,
+      };
+    })
+  );
+}
+
+export async function hydrateTreeForPath(
+  rootPath: string,
+  nodes: TreeNode[],
+  targetPath: string
+): Promise<TreeNode[]> {
+  const segments = getRelativePathSegments(rootPath, targetPath);
+  if (segments.length <= 1) {
+    return nodes;
+  }
+
+  return expandTreeAlongPath(nodes, rootPath, segments.slice(0, -1));
 }

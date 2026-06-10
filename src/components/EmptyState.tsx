@@ -27,7 +27,7 @@ export default function EmptyState() {
               开发者文件预览器
             </h2>
             <p className="max-w-xl text-sm leading-relaxed text-text-secondary">
-              打开 Markdown、JSON、HTML、代码、纯文本和日志文件。
+              打开 Markdown、JSON、HTML、CSV、图片、PDF、代码、纯文本和日志文件。
               支持拖入文件或文件夹，也可以直接恢复上次工作区继续浏览。
             </p>
             <div className="mt-5 flex flex-wrap gap-3">

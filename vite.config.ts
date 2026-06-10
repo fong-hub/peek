@@ -11,6 +11,9 @@ export default defineConfig(async () => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  test: {
+    environment: "node",
+  },
   // Vite options tailored for Tauri development and only applied during `tauri dev` or `tauri build`
   //
   // 1. prevent vite from obscuring rust errors

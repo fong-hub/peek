@@ -5,8 +5,6 @@ const BINARY_EXTENSIONS = new Set([
   "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "zst",
   // 可执行文件
   "exe", "dll", "so", "dylib", "app", "bin",
-  // 图片
-  "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "svg",
   // 视频
   "mp4", "avi", "mkv", "mov", "wmv", "flv", "webm",
   // 音频
@@ -14,15 +12,16 @@ const BINARY_EXTENSIONS = new Set([
   // 字体
   "ttf", "otf", "woff", "woff2", "eot",
   // 文档
-  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pdf",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx",
   // 数据库
   "db", "sqlite", "sqlite3",
   // 其他
   "class", "jar", "war", "ear", "pyc", "o", "a", "lib",
 ]);
 
-// 最大支持预览的文件大小 (10MB)
-const MAX_PREVIEW_SIZE = 10 * 1024 * 1024;
+export const LARGE_FILE_MODE_THRESHOLD = 2 * 1024 * 1024;
+export const MAX_LARGE_FILE_PREVIEW_LINES = 5000;
+export const MAX_LARGE_FILE_PREVIEW_CHARS = 300_000;
 
 /**
  * 检查文件是否是二进制文件（不支持预览）
@@ -35,8 +34,8 @@ export function isBinaryFile(fileName: string): boolean {
 /**
  * 检查文件大小是否超过限制
  */
-export function isFileTooLarge(size: number): boolean {
-  return size > MAX_PREVIEW_SIZE;
+export function shouldUseLargeFileMode(size: number): boolean {
+  return size > LARGE_FILE_MODE_THRESHOLD;
 }
 
 /**

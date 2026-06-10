@@ -1,40 +1,29 @@
+import VirtualizedLineView from "@/components/VirtualizedLineView";
+
 interface Props {
   content: string;
 }
 
 export default function JsonPreviewer({ content }: Props) {
-  let formatted: string;
+  let formatted = content;
   let hasError = false;
 
   try {
     const parsed = JSON.parse(content);
     formatted = JSON.stringify(parsed, null, 2);
   } catch {
-    formatted = content;
     hasError = true;
   }
 
-  const lines = formatted.split("\n");
-
   return (
-    <div className="w-full h-full overflow-auto">
-      <div className="font-mono text-sm leading-relaxed">
-        {hasError && (
-          <div className="px-2 py-2 text-error text-sm">无效的 JSON</div>
-        )}
-        {lines.map((line, index) => (
-          <div
-            key={index}
-            className="flex px-2 py-0.5 hover:bg-bg-secondary/30 transition-colors"
-          >
-            <span className="text-text-muted select-none w-12 text-right mr-3 flex-shrink-0 text-xs pt-0.5">
-              {index + 1}
-            </span>
-            <span className="text-text-primary whitespace-pre-wrap break-all">
-              {line || " "}
-            </span>
-          </div>
-        ))}
+    <div className="w-full h-full flex flex-col">
+      {hasError && (
+        <div className="border-b border-error/20 bg-error/10 px-3 py-2 text-sm text-error">
+          无效的 JSON，已按原始文本展示
+        </div>
+      )}
+      <div className="flex-1 overflow-hidden">
+        <VirtualizedLineView lines={formatted.split("\n")} />
       </div>
     </div>
   );

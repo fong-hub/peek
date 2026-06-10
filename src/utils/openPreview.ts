@@ -1,10 +1,15 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
+import { readTextFile, readTextFileLines, stat } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
-import type { FileInfo, FolderState } from "@/store/useStore";
-import { buildFileTree } from "@/utils/fileTree";
+import type { FileInfo, FilePreviewMeta, FolderState } from "@/store/useStore";
+import { hydrateTreeForPath, listDirectoryNodes } from "@/utils/fileTree";
 import { detectFileType } from "@/utils/fileTypes";
-import { isBinaryFile } from "@/utils/fileUtils";
+import {
+  isBinaryFile,
+  MAX_LARGE_FILE_PREVIEW_CHARS,
+  MAX_LARGE_FILE_PREVIEW_LINES,
+  shouldUseLargeFileMode,
+} from "@/utils/fileUtils";
 import type { SessionSnapshot } from "@/utils/session";
 
 const EMPTY_FOLDER_STATE: FolderState = {
@@ -19,6 +24,28 @@ function getFileName(path: string): string {
 
 export async function loadPreviewFile(path: string): Promise<FileInfo> {
   const name = getFileName(path);
+  const type = detectFileType(name);
+
+  let previewMeta: FilePreviewMeta | undefined;
+
+  try {
+    const fileInfo = await stat(path);
+    previewMeta = {
+      sizeBytes: fileInfo.size,
+    };
+  } catch (error) {
+    console.warn("Failed to read file stat:", path, error);
+  }
+
+  if (type === "image" || type === "pdf") {
+    return {
+      name,
+      path,
+      content: "",
+      type,
+      previewMeta,
+    };
+  }
 
   if (isBinaryFile(name)) {
     return {
@@ -26,16 +53,21 @@ export async function loadPreviewFile(path: string): Promise<FileInfo> {
       path,
       content: "二进制文件暂不支持预览",
       type: "unsupported",
+      previewMeta,
     };
   }
 
   try {
-    const content = await readTextFile(path);
+    const content = previewMeta?.sizeBytes && shouldUseLargeFileMode(previewMeta.sizeBytes)
+      ? await readLargeTextPreview(path, previewMeta.sizeBytes)
+      : { content: await readTextFile(path), previewMeta };
+
     return {
       name,
       path,
-      content,
-      type: detectFileType(name),
+      content: content.content,
+      type,
+      previewMeta: content.previewMeta,
     };
   } catch (error) {
     console.error("Failed to read file:", path, error);
@@ -44,8 +76,47 @@ export async function loadPreviewFile(path: string): Promise<FileInfo> {
       path,
       content: "文件读取失败，可能是二进制文件、权限受限或文件已不存在",
       type: "unsupported",
+      previewMeta,
     };
   }
+}
+
+async function readLargeTextPreview(
+  path: string,
+  sizeBytes?: number
+): Promise<{ content: string; previewMeta: FilePreviewMeta }> {
+  const iterator = await readTextFileLines(path);
+  const lines: string[] = [];
+  let accumulatedChars = 0;
+  let isTruncated = false;
+
+  for await (const line of iterator) {
+    const nextCharCount = accumulatedChars + line.length + 1;
+
+    if (
+      lines.length >= MAX_LARGE_FILE_PREVIEW_LINES ||
+      nextCharCount > MAX_LARGE_FILE_PREVIEW_CHARS
+    ) {
+      isTruncated = true;
+      break;
+    }
+
+    lines.push(line);
+    accumulatedChars = nextCharCount;
+  }
+
+  const content = lines.join("\n");
+
+  return {
+    content,
+    previewMeta: {
+      sizeBytes,
+      previewedBytes: new TextEncoder().encode(content).byteLength,
+      previewedLineCount: lines.length,
+      isLargeFile: true,
+      isTruncated,
+    },
+  };
 }
 
 export async function openStandaloneFile(
@@ -76,8 +147,11 @@ export async function openFolderWorkspace(
   } = {}
 ) {
   const { setFile, setFolder } = useStore.getState();
-  const tree = await buildFileTree(rootPath);
   const activePath = options.filePath ?? options.selectedPath ?? null;
+  const initialTree = await listDirectoryNodes(rootPath);
+  const tree = activePath
+    ? await hydrateTreeForPath(rootPath, initialTree, activePath)
+    : initialTree;
 
   setFolder(
     {

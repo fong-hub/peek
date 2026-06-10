@@ -9,12 +9,14 @@ import {
   X,
   Clock,
   Trash2,
+  LoaderCircle,
 } from "lucide-react";
 import { exists } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import type { TreeNode, RecentItem } from "@/store/useStore";
 import { getRecentItems, removeRecentItem } from "@/utils/recent";
 import { openFileInCurrentFolder, openFolderWorkspace, openStandaloneFile } from "@/utils/openPreview";
+import { listDirectoryNodes } from "@/utils/fileTree";
 import ContextMenu from "./ContextMenu";
 
 type SidebarTab = "files" | "recent";
@@ -25,12 +27,25 @@ interface TreeItemProps {
 }
 
 function TreeItem({ node, depth = 0 }: TreeItemProps) {
-  const { folder, setFile, setSelectedPath, toggleNodeExpanded } = useStore();
+  const { folder, setNodeChildren, setSelectedPath, toggleNodeExpanded } =
+    useStore();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const isSelected = folder.selectedPath === node.path;
 
   const handleClick = async () => {
     if (node.isDirectory) {
+      if (!node.expanded && !node.childrenLoaded) {
+        try {
+          setLoadingChildren(true);
+          const children = await listDirectoryNodes(node.path);
+          setNodeChildren(node.path, children);
+        } catch (err) {
+          console.error("Failed to read directory:", node.path, err);
+        } finally {
+          setLoadingChildren(false);
+        }
+      }
       toggleNodeExpanded(node.path);
     } else {
       try {
@@ -69,7 +84,9 @@ function TreeItem({ node, depth = 0 }: TreeItemProps) {
       >
         {node.isDirectory ? (
           <>
-            {node.expanded ? (
+            {loadingChildren ? (
+              <LoaderCircle size={14} className="flex-shrink-0 animate-spin" />
+            ) : node.expanded ? (
               <ChevronDown size={14} className="flex-shrink-0" />
             ) : (
               <ChevronRight size={14} className="flex-shrink-0" />

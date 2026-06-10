@@ -4,7 +4,7 @@
 
 # Peek — 开发者文件预览器
 
-Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Markdown、JSON、HTML、代码、纯文本和日志等文本类内容的快速浏览体验。
+Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Markdown、JSON、HTML、CSV、代码、纯文本、日志、图片和 PDF 等开发过程中的高频查看场景。
 
 ## 技术栈
 
@@ -16,7 +16,7 @@ Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Ma
 
 ## 功能特性
 
-- ✅ **多格式支持**: Markdown、JSON、HTML、代码、纯文本、日志文件
+- ✅ **多格式支持**: Markdown、JSON、HTML、CSV、代码、纯文本、日志、图片、PDF
 - ✅ **文件夹浏览**: 左侧文件树，支持拖入文件夹浏览项目
 - ✅ **极速打开**: 系统对话框（Ctrl/Cmd + O）+ 拖拽打开
 - ✅ **智能识别**: 自动根据文件扩展名识别类型
@@ -28,6 +28,9 @@ Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Ma
 - ✅ **界面状态记忆**: 记住主题、侧边栏宽度、信息面板状态
 - ✅ **命令行打开**: 支持 `peek <path>` / `peek open <path>` / `peek --help` / `peek --version`
 - ✅ **CLI 单实例转发**: 已启动时再次执行 `peek` 会复用当前窗口并切换到目标路径
+- ✅ **懒加载文件树**: 展开目录时按需读取，打开大型项目更轻
+- ✅ **大文件模式**: 超过阈值自动切换轻量预览，优先保证打开速度
+- ✅ **虚拟滚动**: 文本 / JSON / 日志视图按需渲染，万行内容也能顺滑浏览
 - ✅ **深色/浅色主题**: 一键切换，全程无闪烁
 - ✅ **快捷键**: Ctrl/Cmd + O 打开，ESC 关闭
 
@@ -50,7 +53,10 @@ peek/
 │   │   ├── JsonPreviewer.tsx
 │   │   ├── TextPreviewer.tsx
 │   │   ├── HtmlPreviewer.tsx
-│   │   └── LogPreviewer.tsx
+│   │   ├── LogPreviewer.tsx
+│   │   ├── CsvPreviewer.tsx
+│   │   ├── ImagePreviewer.tsx
+│   │   └── PdfPreviewer.tsx
 │   ├── store/
 │   │   └── useStore.ts           # Zustand 全局状态
 │   └── utils/
@@ -146,10 +152,11 @@ peek --version
 
 ## 后续规划
 
-- [ ] 大文件虚拟滚动优化
-- [ ] 更多格式支持（CSV、YAML、XML）
-- [ ] macOS QuickLook 扩展
+- [ ] 文件内搜索
+- [ ] 前进 / 后退导航
 - [ ] 多标签页预览
+- [ ] YAML / XML 结构化预览
+- [ ] macOS QuickLook 扩展
 - [ ] 插件系统
 
 ## License

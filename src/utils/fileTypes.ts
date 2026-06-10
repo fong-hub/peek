@@ -13,6 +13,18 @@ const extensionMap: Record<string, PreviewType> = {
   htm: "html",
   // Log
   log: "log",
+  // CSV
+  csv: "csv",
+  // PDF
+  pdf: "pdf",
+  // Images
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  bmp: "image",
 };
 
 export function detectFileType(fileName: string): PreviewType {
