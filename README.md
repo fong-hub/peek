@@ -26,7 +26,8 @@ Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Ma
 - ✅ **日志高亮**: 行号展示，ERROR/WARN/INFO/DEBUG 级别颜色区分
 - ✅ **最近打开与恢复**: 支持最近记录、恢复上次工作区
 - ✅ **界面状态记忆**: 记住主题、侧边栏宽度、信息面板状态
-- ✅ **命令行路径打开**: 支持通过可执行文件参数直接打开文件或文件夹
+- ✅ **命令行打开**: 支持 `peek <path>` / `peek open <path>` / `peek --help` / `peek --version`
+- ✅ **CLI 单实例转发**: 已启动时再次执行 `peek` 会复用当前窗口并切换到目标路径
 - ✅ **深色/浅色主题**: 一键切换，全程无闪烁
 - ✅ **快捷键**: Ctrl/Cmd + O 打开，ESC 关闭
 
@@ -97,17 +98,44 @@ npm run tauri:build
 
 ## 命令行打开
 
-打包后的可执行文件支持直接传入路径参数，例如：
+开发构建或打包后的可执行文件都支持直接传入路径：
 
 ```bash
-./src-tauri/target/release/peek /path/to/file-or-folder
+./src-tauri/target/release/peek README.md
+./src-tauri/target/release/peek open /path/to/folder
+./src-tauri/target/release/peek --help
+./src-tauri/target/release/peek --version
 ```
 
-如果你把可执行文件加入 `PATH`，也可以直接使用：
+打包后的 macOS 应用可以安装一个 PATH 包装脚本：
 
 ```bash
-peek /path/to/file-or-folder
+npm run cli:install
 ```
+
+默认会安装到 `~/.local/bin/peek`。如果需要全局命令：
+
+```bash
+npm run cli:install -- --bin-dir /usr/local/bin
+```
+
+如果你的应用不在 `/Applications/Peek.app`，可以显式指定：
+
+```bash
+npm run cli:install -- --app "/Applications/Peek.app"
+```
+
+安装后即可直接使用：
+
+```bash
+peek README.md
+peek .
+peek open ~/project
+peek --help
+peek --version
+```
+
+当 Peek 已经在运行时，再次执行 `peek <path>` 会复用当前窗口并切换到新路径，不会再启动第二个实例。
 
 ## 打包产物
 

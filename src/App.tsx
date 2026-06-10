@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
@@ -10,6 +11,23 @@ import { openPreviewPath, restoreSession } from "@/utils/openPreview";
 import { getCurrentSession, isEmptySession } from "@/utils/session";
 
 let appBootstrapped = false;
+const CLI_EVENT_NAME = "cli-launch-requested";
+
+interface LaunchRequestEvent {
+  paths: string[];
+}
+
+async function consumeQueuedLaunchPaths() {
+  const launchPaths = await invoke<string[]>("take_launch_paths");
+  const nextPath = launchPaths.at(-1);
+
+  if (!nextPath) {
+    return false;
+  }
+
+  await openPreviewPath(nextPath, { addToRecent: true });
+  return true;
+}
 
 export default function App() {
   const { file, setFile, setFolder, setSelectedPath } = useStore();
@@ -24,13 +42,11 @@ export default function App() {
 
     const bootstrapApp = async () => {
       try {
-        const launchPaths = await invoke<string[]>("get_launch_paths");
-        if (launchPaths.length > 0) {
-          await openPreviewPath(launchPaths[0], { addToRecent: true });
+        if (await consumeQueuedLaunchPaths()) {
           return;
         }
       } catch (error) {
-        console.error("Failed to read launch paths:", error);
+        console.error("Failed to consume queued launch paths:", error);
       }
 
       const currentSession = getCurrentSession();
@@ -44,6 +60,33 @@ export default function App() {
     };
 
     void bootstrapApp();
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    const setupLaunchListener = async () => {
+      unlisten = await listen<LaunchRequestEvent>(CLI_EVENT_NAME, async () => {
+        try {
+          await consumeQueuedLaunchPaths();
+        } catch (error) {
+          console.error("Failed to open forwarded CLI path:", error);
+        }
+      });
+
+      try {
+        await consumeQueuedLaunchPaths();
+      } catch (error) {
+        console.error("Failed to consume pending CLI path after listener setup:", error);
+      }
+    };
+
+    void setupLaunchListener();
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
   }, []);
 
   // Tauri native drag-drop event handler
