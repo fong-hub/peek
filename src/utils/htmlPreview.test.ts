@@ -1,7 +1,10 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   fromAssetUrl,
   fromFileUrl,
+  prepareHtmlPreviewContent,
   processHtmlContent,
   resolveHtmlUrlToPath,
   toFileUrl,
@@ -9,6 +12,11 @@ import {
 
 const buildAssetUrl = (filePath: string) =>
   `http://asset.localhost${encodeURI(filePath.replace(/\\/g, "/"))}`;
+
+const fixtureRoot = path.resolve(
+  process.cwd(),
+  "examples/html-preview-repro"
+);
 
 describe("htmlPreview utils", () => {
   it("resolves relative and root-relative paths against current html context", () => {
@@ -74,6 +82,34 @@ describe("htmlPreview utils", () => {
     );
     expect(processed).toContain(
       '<base href="http://asset.localhost/Users/fong/work/code/peek/site/pages/index.html">'
+    );
+  });
+
+  it("inlines local stylesheet files and rewrites nested css asset urls", async () => {
+    const htmlPath = path.join(fixtureRoot, "index.html");
+    const processed = await prepareHtmlPreviewContent(
+      await readFile(htmlPath, "utf8"),
+      {
+        filePath: htmlPath,
+        rootPath: fixtureRoot,
+      },
+      buildAssetUrl,
+      (filePath) => readFile(filePath, "utf8")
+    );
+
+    expect(processed).not.toContain('<link rel="stylesheet" href="./assets/style.css"');
+    expect(processed).toContain('data-peek-inline-style="true"');
+    expect(processed).toContain(
+      'url("http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/pattern.svg")'
+    );
+    expect(processed).toContain(
+      '@import "http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/theme.css"'
+    );
+    expect(processed).toContain(
+      'src="http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/app.js"'
+    );
+    expect(processed).toContain(
+      '<base href="http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/index.html">'
     );
   });
 });

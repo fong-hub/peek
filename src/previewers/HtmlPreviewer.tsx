@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Eye, Code } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import { loadPreviewFile } from "@/utils/openPreview";
 import {
-  processHtmlContent,
+  prepareHtmlPreviewContent,
   resolveHtmlUrlToPath,
 } from "@/utils/htmlPreview";
+import { writeHtmlPreviewFile } from "@/utils/htmlPreviewCache";
 
 interface Props {
   content: string;
@@ -16,6 +17,8 @@ interface Props {
 export default function HtmlPreviewer({ content }: Props) {
   const { file, folder, setFile } = useStore();
   const [mode, setMode] = useState<"preview" | "source">("preview");
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const htmlContext = useMemo(
     () => ({
@@ -25,21 +28,33 @@ export default function HtmlPreviewer({ content }: Props) {
     [file?.path, folder.rootPath]
   );
 
-  const srcDoc = useMemo(
-    () =>
-      mode === "preview"
-        ? processHtmlContent(content, htmlContext, convertFileSrc)
-        : "",
-    [content, htmlContext, mode]
-  );
-
   const resolvePath = useCallback(
     (url: string): string | null => resolveHtmlUrlToPath(url, htmlContext),
     [htmlContext]
   );
 
+  const postViewportHeight = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) {
+      return;
+    }
+
+    iframe.contentWindow.postMessage(
+      {
+        type: "peek-viewport-size",
+        height: iframe.clientHeight,
+      },
+      "*"
+    );
+  }, []);
+
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
+      if (event.data?.type === "peek-viewport-request") {
+        postViewportHeight();
+        return;
+      }
+
       if (event.data?.type === "peek-navigate") {
         const targetPath = resolvePath(String(event.data.url ?? ""));
         if (!targetPath) {
@@ -64,21 +79,24 @@ export default function HtmlPreviewer({ content }: Props) {
 
         try {
           const text = await readTextFile(targetPath);
-          const processed = processHtmlContent(
+          const processed = await prepareHtmlPreviewContent(
             text,
             {
               filePath: targetPath,
               rootPath: folder.rootPath,
             },
-            convertFileSrc
+            convertFileSrc,
+            readTextFile
           );
+          const previewPath = await writeHtmlPreviewFile(targetPath, processed);
+          const previewUrl = convertFileSrc(previewPath);
 
           const iframe = document.querySelector(
             "iframe[data-peek-html-preview='true']"
           ) as HTMLIFrameElement | null;
           if (iframe?.contentWindow) {
             iframe.contentWindow.postMessage(
-              { type: "peek-iframe-content", frameId, content: processed },
+              { type: "peek-iframe-content", frameId, url: previewUrl },
               "*"
             );
           }
@@ -87,13 +105,70 @@ export default function HtmlPreviewer({ content }: Props) {
         }
       }
     },
-    [folder.rootPath, resolvePath, setFile]
+    [folder.rootPath, postViewportHeight, resolvePath, setFile]
   );
 
   useEffect(() => {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [handleMessage]);
+
+  useEffect(() => {
+    if (mode !== "preview" || !file?.path) {
+      setPreviewUrl("");
+      return;
+    }
+
+    let cancelled = false;
+
+    const buildPreview = async () => {
+      try {
+        const processed = await prepareHtmlPreviewContent(
+          content,
+          htmlContext,
+          convertFileSrc,
+          readTextFile
+        );
+        const previewPath = await writeHtmlPreviewFile(file.path, processed);
+        if (!cancelled) {
+          setPreviewUrl(convertFileSrc(previewPath));
+        }
+      } catch (error) {
+        console.error("[Peek] 生成 HTML 预览失败:", file.path, error);
+        if (!cancelled) {
+          setPreviewUrl("");
+        }
+      }
+    };
+
+    void buildPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [content, file?.path, htmlContext, mode]);
+
+  useEffect(() => {
+    if (mode !== "preview") {
+      return;
+    }
+
+    postViewportHeight();
+  }, [mode, postViewportHeight, previewUrl]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      postViewportHeight();
+    });
+
+    observer.observe(iframe);
+    return () => observer.disconnect();
+  }, [postViewportHeight, previewUrl]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -123,12 +198,20 @@ export default function HtmlPreviewer({ content }: Props) {
       </div>
       <div className="flex-1 relative">
         {mode === "preview" ? (
-          <iframe
-            className="absolute inset-0 w-full h-full border-none bg-white"
-            data-peek-html-preview="true"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-top-navigation-by-user-activation"
-            srcDoc={srcDoc}
-          />
+          previewUrl ? (
+            <iframe
+              ref={iframeRef}
+              className="absolute inset-0 w-full h-full border-none bg-white"
+              data-peek-html-preview="true"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-top-navigation-by-user-activation"
+              src={previewUrl}
+              onLoad={postViewportHeight}
+            />
+          ) : (
+            <div className="absolute inset-0 grid place-items-center bg-white text-sm text-text-secondary">
+              HTML 预览生成中...
+            </div>
+          )
         ) : (
           <div className="font-mono text-sm leading-relaxed">
             {content.split("\n").map((line, index) => (

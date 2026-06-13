@@ -24,6 +24,8 @@
     {
       "identifier": "fs:allow-read-dir",
       "allow": [{ "path": "**" }]
-    }
+    },
+    "fs:allow-appcache-read-recursive",
+    "fs:allow-appcache-write-recursive"
   ]
 }

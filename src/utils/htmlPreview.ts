@@ -4,6 +4,7 @@ export interface HtmlPreviewContext {
 }
 
 export type AssetUrlBuilder = (filePath: string) => string;
+export type HtmlFileReader = (filePath: string) => Promise<string>;
 
 const URL_WITH_SCHEME_RE = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 const EXTERNAL_SCHEME_RE =
@@ -82,6 +83,34 @@ function injectBeforeFirstMatch(
   value: string
 ): string {
   return content.replace(pattern, `${value}$&`);
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getTagAttribute(tag: string, attrName: string): string | null {
+  const pattern = new RegExp(
+    `\\b${attrName}\\s*=\\s*(["'])([^"']*)(\\1)`,
+    "i"
+  );
+  const match = pattern.exec(tag);
+  return match?.[2] ?? null;
+}
+
+function hasStylesheetRel(tag: string): boolean {
+  const rel = getTagAttribute(tag, "rel");
+  if (!rel) {
+    return false;
+  }
+
+  return rel
+    .split(/\s+/)
+    .some((part) => part.trim().toLowerCase() === "stylesheet");
 }
 
 function rewriteTagAttribute(
@@ -213,8 +242,13 @@ export function rewriteCssUrls(
 const NAVIGATION_INTERCEPT_SCRIPT = `
 <script>
 (function() {
+  function isAssetUrl(url) {
+    return /^asset:/i.test(url)
+      || /^https?:\\/\\/asset\\.localhost\\//i.test(url);
+  }
   function isLocalUrl(url) {
     return url
+      && !isAssetUrl(url)
       && !url.match(/^https?:/i)
       && !url.match(/^data:/i)
       && !url.match(/^javascript:/i)
@@ -299,8 +333,14 @@ const IFRAME_INTERCEPT_SCRIPT = `
 (function() {
   var iframeCounter = 0;
 
+  function isAssetUrl(url) {
+    return /^asset:/i.test(url)
+      || /^https?:\\/\\/asset\\.localhost\\//i.test(url);
+  }
+
   function isLocalUrl(url) {
     return url
+      && !isAssetUrl(url)
       && !url.match(/^https?:/i)
       && !url.match(/^about:/i)
       && !url.match(/^data:/i)
@@ -410,6 +450,10 @@ const IFRAME_INTERCEPT_SCRIPT = `
     if (e.data && e.data.type === 'peek-iframe-content') {
       var iframe = findIframeByFrameId(e.data.frameId);
       if (iframe) {
+        if (typeof e.data.url === 'string' && e.data.url) {
+          iframe.src = e.data.url;
+          return;
+        }
         iframe.srcdoc = e.data.content;
       }
     }
@@ -422,18 +466,62 @@ const IFRAME_INTERCEPT_SCRIPT = `
 const VIEWPORT_FIX_SCRIPT = `
 <script>
 (function() {
-  function fixViewport() {
-    var frame = window.frameElement;
-    if (!frame) return;
-    var h = frame.clientHeight;
+  function replyToChildViewportRequest(sourceWindow) {
+    if (!sourceWindow) return false;
+
+    var iframes = document.querySelectorAll('iframe');
+    for (var i = 0; i < iframes.length; i += 1) {
+      try {
+        if (iframes[i].contentWindow === sourceWindow) {
+          sourceWindow.postMessage({
+            type: 'peek-viewport-size',
+            height: iframes[i].clientHeight
+          }, '*');
+          return true;
+        }
+      } catch (e) {}
+    }
+
+    return false;
+  }
+
+  function applyHeight(height) {
+    if (!height) return;
     var style = document.getElementById('peek-viewport-fix');
     if (!style) {
       style = document.createElement('style');
       style.id = 'peek-viewport-fix';
       (document.head || document.documentElement).appendChild(style);
     }
-    style.textContent = 'html,body{min-height:' + h + 'px!important}body>*{min-height:' + h + 'px!important}';
+    style.textContent = 'html,body{min-height:' + height + 'px!important}body>*{min-height:' + height + 'px!important}';
   }
+
+  function fixViewport() {
+    try {
+      var frame = window.frameElement;
+      if (frame) {
+        applyHeight(frame.clientHeight);
+        return;
+      }
+    } catch (e) {}
+
+    window.parent.postMessage({ type: 'peek-viewport-request' }, '*');
+  }
+
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'peek-viewport-request') {
+      if (replyToChildViewportRequest(e.source)) {
+        return;
+      }
+      window.parent.postMessage({ type: 'peek-viewport-request' }, '*');
+      return;
+    }
+
+    if (e.data && e.data.type === 'peek-viewport-size') {
+      applyHeight(Number(e.data.height) || 0);
+    }
+  });
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', fixViewport);
   } else {
@@ -503,6 +591,71 @@ function rewriteHtmlResourceUrls(
   return rewritten;
 }
 
+export async function inlineLocalStylesheets(
+  content: string,
+  context: HtmlPreviewContext,
+  buildAssetUrl: AssetUrlBuilder,
+  readFile: HtmlFileReader
+): Promise<string> {
+  const matches = Array.from(content.matchAll(/<link\b[^>]*>/gi));
+  if (matches.length === 0) {
+    return content;
+  }
+
+  let rebuilt = "";
+  let lastIndex = 0;
+
+  for (const match of matches) {
+    const tag = match[0];
+    const start = match.index ?? 0;
+    const end = start + tag.length;
+
+    rebuilt += content.slice(lastIndex, start);
+    lastIndex = end;
+
+    if (!hasStylesheetRel(tag)) {
+      rebuilt += tag;
+      continue;
+    }
+
+    const href = getTagAttribute(tag, "href");
+    if (!href) {
+      rebuilt += tag;
+      continue;
+    }
+
+    const cssPath = resolveHtmlUrlToPath(href, context);
+    if (!cssPath) {
+      rebuilt += tag;
+      continue;
+    }
+
+    try {
+      const css = await readFile(cssPath);
+      const rewrittenCss = rewriteCssUrls(
+        css,
+        {
+          filePath: cssPath,
+          rootPath: context.rootPath,
+        },
+        buildAssetUrl
+      );
+      const media = getTagAttribute(tag, "media");
+      const mediaAttr = media
+        ? ` media="${escapeHtmlAttribute(media)}"`
+        : "";
+      rebuilt += `<style data-peek-inline-style="true" data-peek-source="${escapeHtmlAttribute(
+        cssPath
+      )}"${mediaAttr}>${rewrittenCss}</style>`;
+    } catch {
+      rebuilt += tag;
+    }
+  }
+
+  rebuilt += content.slice(lastIndex);
+  return rebuilt;
+}
+
 export function processHtmlContent(
   content: string,
   context: HtmlPreviewContext,
@@ -561,4 +714,20 @@ export function processHtmlContent(
   }
 
   return processedContent;
+}
+
+export async function prepareHtmlPreviewContent(
+  content: string,
+  context: HtmlPreviewContext,
+  buildAssetUrl: AssetUrlBuilder,
+  readFile: HtmlFileReader
+): Promise<string> {
+  const withInlineStyles = await inlineLocalStylesheets(
+    content,
+    context,
+    buildAssetUrl,
+    readFile
+  );
+
+  return processHtmlContent(withInlineStyles, context, buildAssetUrl);
 }
