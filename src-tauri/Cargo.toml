@@ -1,6 +1,6 @@
 [package]
 name = "peek"
-version = "1.4.0"
+version = "1.5.0"
 description = "Peek - 开发者文件预览器"
 authors = ["you"]
 edition = "2021"
