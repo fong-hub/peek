@@ -34,8 +34,8 @@ export default function FileInfoPanel() {
 
 
   return (
-    <div className="border-b border-border bg-bg-tertiary">
-      <div className="flex items-center justify-between px-4 py-2">
+    <div className="overflow-x-auto border-b border-border bg-bg-tertiary">
+      <div className="flex min-w-max items-center justify-between px-4 py-2">
         <div className="flex items-center gap-6">
           {/* 文件名和路径 */}
           <div className="flex items-center gap-2">

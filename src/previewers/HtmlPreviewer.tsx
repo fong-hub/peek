@@ -1,23 +1,46 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Eye, Code } from "lucide-react";
+import { Eye, Code, RefreshCw } from "lucide-react";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
 import { loadPreviewFile } from "@/utils/openPreview";
 import {
+  getEffectiveRootPath,
   prepareHtmlPreviewContent,
   resolveHtmlUrlToPath,
 } from "@/utils/htmlPreview";
-import { writeHtmlPreviewFile } from "@/utils/htmlPreviewCache";
+import {
+  getHtmlPreviewModulePath,
+  writeHtmlPreviewFile,
+  writeHtmlPreviewModuleFile,
+} from "@/utils/htmlPreviewCache";
+import { cacheLocalModuleGraph } from "@/utils/htmlModules";
 
 interface Props {
   content: string;
+}
+
+async function prepareModuleGraph(
+  entryPath: string,
+  rootPath: string | null,
+  entrySource?: string
+) {
+  return cacheLocalModuleGraph(
+    entryPath,
+    { filePath: entryPath, rootPath },
+    readTextFile,
+    getHtmlPreviewModulePath,
+    writeHtmlPreviewModuleFile,
+    convertFileSrc,
+    entrySource
+  );
 }
 
 export default function HtmlPreviewer({ content }: Props) {
   const { file, folder, setFile } = useStore();
   const [mode, setMode] = useState<"preview" | "source">("preview");
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const htmlContext = useMemo(
@@ -33,27 +56,10 @@ export default function HtmlPreviewer({ content }: Props) {
     [htmlContext]
   );
 
-  const postViewportHeight = useCallback(() => {
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) {
-      return;
-    }
-
-    iframe.contentWindow.postMessage(
-      {
-        type: "peek-viewport-size",
-        height: iframe.clientHeight,
-      },
-      "*"
-    );
-  }, []);
-
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
-      if (event.data?.type === "peek-viewport-request") {
-        postViewportHeight();
-        return;
-      }
+      const previewWindow = iframeRef.current?.contentWindow;
+      if (!previewWindow || event.source !== previewWindow) return;
 
       if (event.data?.type === "peek-navigate") {
         const targetPath = resolvePath(String(event.data.url ?? ""));
@@ -86,16 +92,22 @@ export default function HtmlPreviewer({ content }: Props) {
               rootPath: folder.rootPath,
             },
             convertFileSrc,
-            readTextFile
+            readTextFile,
+            (modulePath, moduleSource) =>
+              prepareModuleGraph(
+                modulePath,
+                getEffectiveRootPath({
+                  filePath: targetPath,
+                  rootPath: folder.rootPath,
+                }),
+                moduleSource
+              )
           );
           const previewPath = await writeHtmlPreviewFile(targetPath, processed);
           const previewUrl = convertFileSrc(previewPath);
 
-          const iframe = document.querySelector(
-            "iframe[data-peek-html-preview='true']"
-          ) as HTMLIFrameElement | null;
-          if (iframe?.contentWindow) {
-            iframe.contentWindow.postMessage(
+          if (previewWindow) {
+            previewWindow.postMessage(
               { type: "peek-iframe-content", frameId, url: previewUrl },
               "*"
             );
@@ -105,7 +117,7 @@ export default function HtmlPreviewer({ content }: Props) {
         }
       }
     },
-    [folder.rootPath, postViewportHeight, resolvePath, setFile]
+    [folder.rootPath, resolvePath, setFile]
   );
 
   useEffect(() => {
@@ -127,7 +139,13 @@ export default function HtmlPreviewer({ content }: Props) {
           content,
           htmlContext,
           convertFileSrc,
-          readTextFile
+          readTextFile,
+          (modulePath, moduleSource) =>
+            prepareModuleGraph(
+              modulePath,
+              getEffectiveRootPath(htmlContext),
+              moduleSource
+            )
         );
         const previewPath = await writeHtmlPreviewFile(file.path, processed);
         if (!cancelled) {
@@ -146,29 +164,7 @@ export default function HtmlPreviewer({ content }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [content, file?.path, htmlContext, mode]);
-
-  useEffect(() => {
-    if (mode !== "preview") {
-      return;
-    }
-
-    postViewportHeight();
-  }, [mode, postViewportHeight, previewUrl]);
-
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => {
-      postViewportHeight();
-    });
-
-    observer.observe(iframe);
-    return () => observer.disconnect();
-  }, [postViewportHeight, previewUrl]);
+  }, [content, file?.path, htmlContext, mode, refreshKey]);
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -195,6 +191,17 @@ export default function HtmlPreviewer({ content }: Props) {
           <Code size={14} />
           源码
         </button>
+        {mode === "preview" && (
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            className="ml-auto grid h-7 w-7 place-items-center rounded-[4px] text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            title="重新加载预览"
+            aria-label="重新加载预览"
+          >
+            <RefreshCw size={14} />
+          </button>
+        )}
       </div>
       <div className="flex-1 relative">
         {mode === "preview" ? (
@@ -205,7 +212,6 @@ export default function HtmlPreviewer({ content }: Props) {
               data-peek-html-preview="true"
               sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-top-navigation-by-user-activation"
               src={previewUrl}
-              onLoad={postViewportHeight}
             />
           ) : (
             <div className="absolute inset-0 grid place-items-center bg-white text-sm text-text-secondary">
@@ -213,7 +219,7 @@ export default function HtmlPreviewer({ content }: Props) {
             </div>
           )
         ) : (
-          <div className="font-mono text-sm leading-relaxed">
+          <div className="h-full overflow-auto font-mono text-sm leading-relaxed">
             {content.split("\n").map((line, index) => (
               <div
                 key={index}

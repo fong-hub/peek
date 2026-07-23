@@ -65,6 +65,14 @@ body {
   opacity: 0.8;
 }
 
+.tab-strip-scrollbar::-webkit-scrollbar {
+  height: 2px;
+}
+
+.tab-strip-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-accent);
+}
+
 /* Selection */
 ::selection {
   background-color: rgba(59, 130, 246, 0.3);

@@ -11,6 +11,8 @@ export interface SessionSnapshot {
   rootPath: string | null;
   selectedPath: string | null;
   filePath: string | null;
+  tabPaths: string[];
+  activeTabPath: string | null;
 }
 
 const UI_PREFERENCES_KEY = "peek_ui_preferences";
@@ -28,6 +30,8 @@ export const EMPTY_SESSION: SessionSnapshot = {
   rootPath: null,
   selectedPath: null,
   filePath: null,
+  tabPaths: [],
+  activeTabPath: null,
 };
 
 function isBrowserAvailable(): boolean {
@@ -70,10 +74,25 @@ export function saveUiPreferences(preferences: UiPreferences) {
 }
 
 function normalizeSessionSnapshot(value: Partial<SessionSnapshot> | null): SessionSnapshot {
+  const legacyFilePath = typeof value?.filePath === "string" ? value.filePath : null;
+  const tabPaths = Array.isArray(value?.tabPaths)
+    ? Array.from(new Set(value.tabPaths.filter((path): path is string => typeof path === "string")))
+    : legacyFilePath
+      ? [legacyFilePath]
+      : [];
+  const requestedActivePath = typeof value?.activeTabPath === "string"
+    ? value.activeTabPath
+    : legacyFilePath;
+  const activeTabPath = requestedActivePath && tabPaths.includes(requestedActivePath)
+    ? requestedActivePath
+    : tabPaths.at(-1) ?? null;
+
   return {
     rootPath: typeof value?.rootPath === "string" ? value.rootPath : null,
     selectedPath: typeof value?.selectedPath === "string" ? value.selectedPath : null,
-    filePath: typeof value?.filePath === "string" ? value.filePath : null,
+    filePath: activeTabPath,
+    tabPaths,
+    activeTabPath,
   };
 }
 
@@ -102,5 +121,5 @@ export function saveLastSession(session: SessionSnapshot) {
 }
 
 export function isEmptySession(session: SessionSnapshot): boolean {
-  return !session.rootPath && !session.filePath;
+  return !session.rootPath && session.tabPaths.length === 0 && !session.filePath;
 }

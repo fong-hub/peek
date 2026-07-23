@@ -1,7 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile, readTextFileLines, stat } from "@tauri-apps/plugin-fs";
 import { useStore } from "@/store/useStore";
-import type { FileInfo, FilePreviewMeta, FolderState } from "@/store/useStore";
+import type { FileInfo, FilePreviewMeta } from "@/store/useStore";
 import { hydrateTreeForPath, listDirectoryNodes } from "@/utils/fileTree";
 import { detectFileType } from "@/utils/fileTypes";
 import {
@@ -11,12 +11,6 @@ import {
   shouldUseLargeFileMode,
 } from "@/utils/fileUtils";
 import type { SessionSnapshot } from "@/utils/session";
-
-const EMPTY_FOLDER_STATE: FolderState = {
-  rootPath: null,
-  tree: [],
-  selectedPath: null,
-};
 
 function getFileName(path: string): string {
   return path.split(/[/\\]/).pop() || "unknown";
@@ -123,11 +117,10 @@ export async function openStandaloneFile(
   path: string,
   options: { addToRecent?: boolean } = {}
 ) {
-  const { setFile, setFolder } = useStore.getState();
+  const { setFile } = useStore.getState();
   const fileInfo = await loadPreviewFile(path);
 
   setFile(fileInfo, options.addToRecent ?? true);
-  setFolder(EMPTY_FOLDER_STATE, false);
 }
 
 export async function openFileInCurrentFolder(path: string) {
@@ -144,6 +137,7 @@ export async function openFolderWorkspace(
     selectedPath?: string | null;
     filePath?: string | null;
     addToRecent?: boolean;
+    activateFile?: boolean;
   } = {}
 ) {
   const { setFile, setFolder } = useStore.getState();
@@ -153,6 +147,7 @@ export async function openFolderWorkspace(
     ? await hydrateTreeForPath(rootPath, initialTree, activePath)
     : initialTree;
 
+  setFile(null, false);
   setFolder(
     {
       rootPath,
@@ -162,7 +157,7 @@ export async function openFolderWorkspace(
     options.addToRecent ?? true
   );
 
-  if (activePath) {
+  if (activePath && options.activateFile !== false) {
     const fileInfo = await loadPreviewFile(activePath);
     setFile(fileInfo, false);
     return;
@@ -188,25 +183,42 @@ export async function restoreSession(session: SessionSnapshot) {
   if (session.rootPath) {
     await openFolderWorkspace(session.rootPath, {
       selectedPath: session.selectedPath,
-      filePath: session.filePath ?? session.selectedPath,
       addToRecent: false,
+      activateFile: false,
     });
-    return;
+  } else {
+    useStore.getState().setFile(null, false);
   }
 
-  if (session.filePath) {
-    await openStandaloneFile(session.filePath, { addToRecent: false });
+  const tabPaths = session.tabPaths.length > 0
+    ? session.tabPaths
+    : session.filePath
+      ? [session.filePath]
+      : [];
+
+  for (const path of tabPaths) {
+    try {
+      const fileInfo = await loadPreviewFile(path);
+      useStore.getState().setFile(fileInfo, false);
+    } catch (error) {
+      console.warn("Failed to restore preview tab:", path, error);
+    }
+  }
+
+  if (session.activeTabPath) {
+    useStore.getState().activateTab(session.activeTabPath);
   }
 }
 
 export async function openFileDialog() {
   const selected = await open({
-    multiple: false,
+    multiple: true,
     directory: false,
   });
 
-  if (selected && typeof selected === "string") {
-    await openStandaloneFile(selected);
+  const paths = Array.isArray(selected) ? selected : selected ? [selected] : [];
+  for (const path of paths) {
+    await openStandaloneFile(path);
   }
 }
 

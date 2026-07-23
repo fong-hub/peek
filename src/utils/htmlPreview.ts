@@ -5,6 +5,10 @@ export interface HtmlPreviewContext {
 
 export type AssetUrlBuilder = (filePath: string) => string;
 export type HtmlFileReader = (filePath: string) => Promise<string>;
+export type HtmlModulePreparer = (
+  filePath: string,
+  source?: string
+) => Promise<string>;
 
 const URL_WITH_SCHEME_RE = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 const EXTERNAL_SCHEME_RE =
@@ -25,6 +29,10 @@ function ensureTrailingSlash(path: string): string {
 function decodeUrlPath(pathname: string): string {
   const normalizedPath = decodeURIComponent(pathname);
 
+  if (/^\/%2f/i.test(pathname) && normalizedPath.startsWith("//")) {
+    return normalizedPath.slice(1);
+  }
+
   if (/^\/[A-Za-z]:\//.test(normalizedPath)) {
     return normalizedPath.slice(1);
   }
@@ -44,7 +52,7 @@ function isAssetUrl(url: string): boolean {
   }
 }
 
-function getEffectiveRootPath({
+export function getEffectiveRootPath({
   filePath,
   rootPath,
 }: HtmlPreviewContext): string | null {
@@ -67,66 +75,6 @@ function getEffectiveRootPath({
   }
 
   return extractDirectoryPath(filePath);
-}
-
-function injectAfterFirstMatch(
-  content: string,
-  pattern: RegExp,
-  value: string
-): string {
-  return content.replace(pattern, (match) => `${match}${value}`);
-}
-
-function injectBeforeFirstMatch(
-  content: string,
-  pattern: RegExp,
-  value: string
-): string {
-  return content.replace(pattern, `${value}$&`);
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function getTagAttribute(tag: string, attrName: string): string | null {
-  const pattern = new RegExp(
-    `\\b${attrName}\\s*=\\s*(["'])([^"']*)(\\1)`,
-    "i"
-  );
-  const match = pattern.exec(tag);
-  return match?.[2] ?? null;
-}
-
-function hasStylesheetRel(tag: string): boolean {
-  const rel = getTagAttribute(tag, "rel");
-  if (!rel) {
-    return false;
-  }
-
-  return rel
-    .split(/\s+/)
-    .some((part) => part.trim().toLowerCase() === "stylesheet");
-}
-
-function rewriteTagAttribute(
-  content: string,
-  tagName: string,
-  attrName: string,
-  rewrite: (value: string) => string
-): string {
-  const pattern = new RegExp(
-    `(<${tagName}\\b[^>]*?\\b${attrName}\\s*=\\s*)(["'])([^"']+)(\\2)`,
-    "gi"
-  );
-
-  return content.replace(pattern, (_match, prefix, quote, value, suffix) => {
-    return `${prefix}${quote}${rewrite(value)}${suffix}`;
-  });
 }
 
 export function toFileUrl(path: string): string {
@@ -207,7 +155,8 @@ export function resolveHtmlResourceUrl(
     return rawUrl;
   }
 
-  return buildAssetUrl(localPath);
+  const suffixMatch = rawUrl.trim().match(/(?:\?[^#]*)?(?:#.*)?$/);
+  return buildAssetUrl(localPath) + (suffixMatch?.[0] ?? "");
 }
 
 export function rewriteCssUrls(
@@ -261,37 +210,6 @@ const NAVIGATION_INTERCEPT_SCRIPT = `
     window.parent.postMessage({ type: 'peek-navigate', url: url }, '*');
   }
 
-  try {
-    var locProto = Object.getPrototypeOf(window.location);
-    var hrefDesc = Object.getOwnPropertyDescriptor(locProto, 'href') || Object.getOwnPropertyDescriptor(window.location, 'href');
-    if (hrefDesc && hrefDesc.set) {
-      Object.defineProperty(window.location, 'href', {
-        get: function() { return hrefDesc.get.call(window.location); },
-        set: function(url) {
-          if (isLocalUrl(url)) { notifyNavigate(url); return; }
-          hrefDesc.set.call(window.location, url);
-        }
-      });
-    }
-  } catch(e) {}
-
-  var origAssign = window.location.assign;
-  window.location.assign = function(url) {
-    if (isLocalUrl(url)) { notifyNavigate(url); return; }
-    origAssign.call(window.location, url);
-  };
-  var origReplace = window.location.replace;
-  window.location.replace = function(url) {
-    if (isLocalUrl(url)) { notifyNavigate(url); return; }
-    origReplace.call(window.location, url);
-  };
-
-  var origOpen = window.open;
-  window.open = function(url, target, features) {
-    if (url && isLocalUrl(url)) { notifyNavigate(url); return null; }
-    return origOpen.apply(this, arguments);
-  };
-
   document.addEventListener('click', function(e) {
     var el = e.target;
     while (el && el !== document.body) {
@@ -306,10 +224,7 @@ const NAVIGATION_INTERCEPT_SCRIPT = `
           return false;
         }
 
-        e.preventDefault();
-        e.stopPropagation();
-        window.open(rawHref, '_blank');
-        return false;
+        return;
       }
       el = el.parentElement;
     }
@@ -384,22 +299,6 @@ const IFRAME_INTERCEPT_SCRIPT = `
     return null;
   }
 
-  try {
-    var srcProp = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
-    if (srcProp && srcProp.set) {
-      Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
-        get: function() { return srcProp.get.call(this); },
-        set: function(url) {
-          if (isLocalUrl(url)) {
-            handleIframe(this, url);
-            return;
-          }
-          srcProp.set.call(this, url);
-        }
-      });
-    }
-  } catch(e) {}
-
   document.querySelectorAll('iframe').forEach(function(iframe) {
     var url = iframe.getAttribute('src');
     if (url && isLocalUrl(url)) {
@@ -413,6 +312,12 @@ const IFRAME_INTERCEPT_SCRIPT = `
 
     var observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.target.tagName === 'IFRAME') {
+          var changedUrl = mutation.target.getAttribute('src');
+          if (changedUrl && isLocalUrl(changedUrl)) {
+            handleIframe(mutation.target, changedUrl);
+          }
+        }
         if (mutation.type === 'childList') {
           mutation.addedNodes.forEach(function(node) {
             if (node.tagName === 'IFRAME') {
@@ -435,6 +340,8 @@ const IFRAME_INTERCEPT_SCRIPT = `
     });
 
     observer.observe(target, {
+      attributes: true,
+      attributeFilter: ['src'],
       childList: true,
       subtree: true
     });
@@ -462,198 +369,179 @@ const IFRAME_INTERCEPT_SCRIPT = `
 </script>
 `;
 
-/** 注入脚本，通过 window.frameElement 获取 iframe 实际高度并修正 body 尺寸 */
-const VIEWPORT_FIX_SCRIPT = `
-<script>
-(function() {
-  function replyToChildViewportRequest(sourceWindow) {
-    if (!sourceWindow) return false;
-
-    var iframes = document.querySelectorAll('iframe');
-    for (var i = 0; i < iframes.length; i += 1) {
-      try {
-        if (iframes[i].contentWindow === sourceWindow) {
-          sourceWindow.postMessage({
-            type: 'peek-viewport-size',
-            height: iframes[i].clientHeight
-          }, '*');
-          return true;
-        }
-      } catch (e) {}
-    }
-
-    return false;
+function rewriteElementAttribute(
+  element: Element,
+  name: string,
+  rewrite: (value: string) => string
+) {
+  const value = element.getAttribute(name);
+  if (value !== null) {
+    element.setAttribute(name, rewrite(value));
   }
-
-  function applyHeight(height) {
-    if (!height) return;
-    var style = document.getElementById('peek-viewport-fix');
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'peek-viewport-fix';
-      (document.head || document.documentElement).appendChild(style);
-    }
-    style.textContent = 'html,body{min-height:' + height + 'px!important}body>*{min-height:' + height + 'px!important}';
-  }
-
-  function fixViewport() {
-    try {
-      var frame = window.frameElement;
-      if (frame) {
-        applyHeight(frame.clientHeight);
-        return;
-      }
-    } catch (e) {}
-
-    window.parent.postMessage({ type: 'peek-viewport-request' }, '*');
-  }
-
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'peek-viewport-request') {
-      if (replyToChildViewportRequest(e.source)) {
-        return;
-      }
-      window.parent.postMessage({ type: 'peek-viewport-request' }, '*');
-      return;
-    }
-
-    if (e.data && e.data.type === 'peek-viewport-size') {
-      applyHeight(Number(e.data.height) || 0);
-    }
-  });
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', fixViewport);
-  } else {
-    fixViewport();
-  }
-  window.addEventListener('resize', fixViewport);
-})();
-</script>
-`;
-
-/**
- * 在 iframe 中，某些 WebView 对 100vh 的计算会基于外层窗口而非 iframe 本身，
- * 导致使用了 100vh 的页面底部元素被截断。
- */
-function fixViewportUnits(content: string): string {
-  let result = content.replace(
-    /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_match, open: string, css: string, close: string) => {
-      return open + css.replace(/100vh/g, "100%") + close;
-    }
-  );
-
-  result = result.replace(
-    /style="([^"]*)"/gi,
-    (_match, styles: string) => {
-      return 'style="' + styles.replace(/100vh/g, "100%") + '"';
-    }
-  );
-
-  return result;
 }
 
-function rewriteHtmlResourceUrls(
-  content: string,
+function getBaseResourceContext(
+  baseHref: string | null,
+  context: HtmlPreviewContext
+): HtmlPreviewContext | null {
+  if (!baseHref) return context;
+
+  const basePath = resolveHtmlUrlToPath(baseHref, context);
+  if (!basePath) return null;
+
+  const pathWithoutSuffix = baseHref.split("#")[0].split("?")[0];
+  return {
+    ...context,
+    filePath: /[/\\]$/.test(pathWithoutSuffix)
+      ? `${ensureTrailingSlash(basePath)}__peek_base__.html`
+      : basePath,
+  };
+}
+
+function rewriteSrcset(
+  value: string,
   context: HtmlPreviewContext,
   buildAssetUrl: AssetUrlBuilder
 ): string {
-  let rewritten = content;
-  const rewrite = (value: string) =>
-    resolveHtmlResourceUrl(value, context, buildAssetUrl);
+  if (/^\s*data:/i.test(value)) return value;
 
-  for (const tagName of ["script", "img", "source", "audio", "video", "embed"]) {
-    rewritten = rewriteTagAttribute(rewritten, tagName, "src", rewrite);
-  }
-
-  for (const tagName of ["video", "source"]) {
-    rewritten = rewriteTagAttribute(rewritten, tagName, "poster", rewrite);
-  }
-
-  rewritten = rewriteTagAttribute(rewritten, "link", "href", rewrite);
-  rewritten = rewriteTagAttribute(rewritten, "object", "data", rewrite);
-
-  rewritten = rewritten.replace(
-    /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_match, open: string, css: string, close: string) => {
-      return open + rewriteCssUrls(css, context, buildAssetUrl) + close;
-    }
-  );
-
-  rewritten = rewritten.replace(
-    /style="([^"]*)"/gi,
-    (_match, styles: string) => {
-      return `style="${rewriteCssUrls(styles, context, buildAssetUrl)}"`;
-    }
-  );
-
-  return rewritten;
+  return value
+    .split(",")
+    .map((candidate) => {
+      const match = candidate.trim().match(/^(\S+)([\s\S]*)$/);
+      if (!match) return candidate;
+      return resolveHtmlResourceUrl(match[1], context, buildAssetUrl) + match[2];
+    })
+    .join(", ");
 }
 
-export async function inlineLocalStylesheets(
+function collectElements(root: ParentNode): Element[] {
+  const elements = Array.from(root.querySelectorAll("*"));
+  for (const element of [...elements]) {
+    if (element.tagName.toLowerCase() === "template") {
+      elements.push(...collectElements((element as HTMLTemplateElement).content));
+    }
+  }
+  return elements;
+}
+
+function appendInjectedScripts(document: Document, body: HTMLElement) {
+  const template = document.createElement("template");
+  template.innerHTML = NAVIGATION_INTERCEPT_SCRIPT + IFRAME_INTERCEPT_SCRIPT;
+  body.append(template.content);
+}
+
+function serializeHtmlDocument(document: Document): string {
+  const doctype = document.doctype;
+  let serializedDoctype = "";
+
+  if (doctype) {
+    const publicId = doctype.publicId ? ` PUBLIC "${doctype.publicId}"` : "";
+    const systemId = doctype.systemId
+      ? `${doctype.publicId ? "" : " SYSTEM"} "${doctype.systemId}"`
+      : "";
+    serializedDoctype = `<!DOCTYPE ${doctype.name}${publicId}${systemId}>`;
+  }
+
+  return serializedDoctype + document.documentElement.outerHTML;
+}
+
+async function inlineLocalStylesheets(
   content: string,
   context: HtmlPreviewContext,
   buildAssetUrl: AssetUrlBuilder,
   readFile: HtmlFileReader
 ): Promise<string> {
-  const matches = Array.from(content.matchAll(/<link\b[^>]*>/gi));
-  if (matches.length === 0) {
-    return content;
-  }
+  const document = new DOMParser().parseFromString(content, "text/html");
+  const elements = collectElements(document);
+  const baseElement = elements.find((element) => element.tagName.toLowerCase() === "base");
+  const resourceContext = getBaseResourceContext(
+    baseElement?.getAttribute("href") ?? null,
+    context
+  );
 
-  let rebuilt = "";
-  let lastIndex = 0;
+  if (!resourceContext) return content;
 
-  for (const match of matches) {
-    const tag = match[0];
-    const start = match.index ?? 0;
-    const end = start + tag.length;
+  const stylesheetLinks = elements.filter((element) => {
+    if (element.tagName.toLowerCase() !== "link") return false;
+    return (element.getAttribute("rel") ?? "")
+      .split(/\s+/)
+      .some((rel) => rel.toLowerCase() === "stylesheet");
+  });
 
-    rebuilt += content.slice(lastIndex, start);
-    lastIndex = end;
-
-    if (!hasStylesheetRel(tag)) {
-      rebuilt += tag;
-      continue;
-    }
-
-    const href = getTagAttribute(tag, "href");
-    if (!href) {
-      rebuilt += tag;
-      continue;
-    }
-
-    const cssPath = resolveHtmlUrlToPath(href, context);
-    if (!cssPath) {
-      rebuilt += tag;
-      continue;
-    }
+  for (const link of stylesheetLinks) {
+    const href = link.getAttribute("href");
+    const cssPath = href ? resolveHtmlUrlToPath(href, resourceContext) : null;
+    if (!cssPath) continue;
 
     try {
       const css = await readFile(cssPath);
-      const rewrittenCss = rewriteCssUrls(
+      const style = document.createElement("style");
+      for (const attribute of Array.from(link.attributes)) {
+        if (!["href", "rel", "integrity", "crossorigin", "referrerpolicy"].includes(attribute.name)) {
+          style.setAttribute(attribute.name, attribute.value);
+        }
+      }
+      style.dataset.peekInlineStyle = "true";
+      style.dataset.peekSource = cssPath;
+      style.textContent = rewriteCssUrls(
         css,
         {
           filePath: cssPath,
-          rootPath: context.rootPath,
+          rootPath: getEffectiveRootPath(context),
         },
         buildAssetUrl
       );
-      const media = getTagAttribute(tag, "media");
-      const mediaAttr = media
-        ? ` media="${escapeHtmlAttribute(media)}"`
-        : "";
-      rebuilt += `<style data-peek-inline-style="true" data-peek-source="${escapeHtmlAttribute(
-        cssPath
-      )}"${mediaAttr}>${rewrittenCss}</style>`;
+      link.replaceWith(style);
     } catch {
-      rebuilt += tag;
+      // Leave the original link intact so the WebView can still attempt to load it.
     }
   }
 
-  rebuilt += content.slice(lastIndex);
-  return rebuilt;
+  return serializeHtmlDocument(document);
+}
+
+async function prepareLocalModuleScripts(
+  content: string,
+  context: HtmlPreviewContext,
+  prepareModule: HtmlModulePreparer
+): Promise<string> {
+  const document = new DOMParser().parseFromString(content, "text/html");
+  const elements = collectElements(document);
+  const baseElement = elements.find((element) => element.tagName.toLowerCase() === "base");
+  const resourceContext = getBaseResourceContext(
+    baseElement?.getAttribute("href") ?? null,
+    context
+  );
+  if (!resourceContext) return content;
+
+  const moduleScripts = elements.filter(
+    (element) =>
+      element.tagName.toLowerCase() === "script" &&
+      element.getAttribute("type")?.trim().toLowerCase() === "module"
+  );
+
+  for (const [index, script] of moduleScripts.entries()) {
+    const src = script.getAttribute("src");
+    const modulePath = src
+      ? resolveHtmlUrlToPath(src, resourceContext)
+      : resourceContext.filePath
+        ? `${resourceContext.filePath}#peek-inline-${index}`
+        : null;
+    if (!modulePath) continue;
+
+    try {
+      script.setAttribute(
+        "src",
+        await prepareModule(modulePath, src ? undefined : script.textContent ?? "")
+      );
+      if (!src) script.textContent = "";
+    } catch {
+      // Keep the original script URL as a fallback for standalone modules.
+    }
+  }
+
+  return serializeHtmlDocument(document);
 }
 
 export function processHtmlContent(
@@ -661,73 +549,85 @@ export function processHtmlContent(
   context: HtmlPreviewContext,
   buildAssetUrl: AssetUrlBuilder
 ): string {
-  let processedContent = content;
+  const document = new DOMParser().parseFromString(content, "text/html");
+  const elements = collectElements(document);
 
-  processedContent = fixViewportUnits(processedContent);
-  processedContent = rewriteHtmlResourceUrls(
-    processedContent,
-    context,
-    buildAssetUrl
-  );
+  const head = document.head;
+  const body = document.body;
+  const baseElement = elements.find((element) => element.tagName.toLowerCase() === "base");
+  const baseHref = baseElement?.getAttribute("href") ?? null;
+  const resourceContext = getBaseResourceContext(baseHref, context);
 
-  processedContent = processedContent.replace(
-    /<meta[^>]*name=["']viewport["'][^>]*>/i,
-    '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
-  );
+  const resourceAttributes: Record<string, string[]> = {
+    script: ["src"],
+    img: ["src"],
+    source: ["src"],
+    audio: ["src"],
+    video: ["src", "poster"],
+    embed: ["src"],
+    link: ["href"],
+    object: ["data"],
+    input: ["src"],
+    track: ["src"],
+  };
 
-  if (context.filePath) {
-    const baseTag = `<base href="${buildAssetUrl(context.filePath)}">`;
+  for (const element of elements) {
+    const tagName = element.tagName.toLowerCase();
+    if (element !== baseElement && resourceContext) {
+      for (const attribute of resourceAttributes[tagName] ?? []) {
+        rewriteElementAttribute(element, attribute, (value) =>
+          resolveHtmlResourceUrl(value, resourceContext, buildAssetUrl)
+        );
+      }
 
-    if (/<head\b[^>]*>/i.test(processedContent)) {
-      processedContent = injectAfterFirstMatch(
-        processedContent,
-        /<head\b[^>]*>/i,
-        baseTag
+      if (tagName === "img" || tagName === "source") {
+        rewriteElementAttribute(element, "srcset", (value) =>
+          rewriteSrcset(value, resourceContext, buildAssetUrl)
+        );
+      }
+
+      rewriteElementAttribute(element, "style", (value) =>
+        rewriteCssUrls(value, resourceContext, buildAssetUrl)
       );
-    } else if (/<html\b[^>]*>/i.test(processedContent)) {
-      processedContent = injectAfterFirstMatch(
-        processedContent,
-        /<html\b[^>]*>/i,
-        `<head>${baseTag}</head>`
-      );
-    } else {
-      processedContent = baseTag + processedContent;
+
+      if (tagName === "style") {
+        element.textContent = rewriteCssUrls(
+          element.textContent ?? "",
+          resourceContext,
+          buildAssetUrl
+        );
+      }
     }
   }
 
-  const injectedScripts =
-    VIEWPORT_FIX_SCRIPT + NAVIGATION_INTERCEPT_SCRIPT + IFRAME_INTERCEPT_SCRIPT;
-  if (/<\/body>/i.test(processedContent)) {
-    processedContent = injectBeforeFirstMatch(
-      processedContent,
-      /<\/body>/i,
-      injectedScripts
-    );
-  } else if (/<\/html>/i.test(processedContent)) {
-    processedContent = injectBeforeFirstMatch(
-      processedContent,
-      /<\/html>/i,
-      injectedScripts
-    );
-  } else {
-    processedContent += injectedScripts;
+  if (baseElement && baseHref) {
+    baseElement.setAttribute("href", resolveHtmlResourceUrl(baseHref, context, buildAssetUrl));
+  } else if (head && context.filePath) {
+    const injectedBase = document.createElement("base");
+    injectedBase.href = buildAssetUrl(context.filePath);
+    head.prepend(injectedBase);
   }
 
-  return processedContent;
+  if (body) appendInjectedScripts(document, body);
+
+  return serializeHtmlDocument(document);
 }
 
 export async function prepareHtmlPreviewContent(
   content: string,
   context: HtmlPreviewContext,
   buildAssetUrl: AssetUrlBuilder,
-  readFile: HtmlFileReader
+  readFile: HtmlFileReader,
+  prepareModule?: HtmlModulePreparer
 ): Promise<string> {
-  const withInlineStyles = await inlineLocalStylesheets(
+  const withLocalStyles = await inlineLocalStylesheets(
     content,
     context,
     buildAssetUrl,
     readFile
   );
-
-  return processHtmlContent(withInlineStyles, context, buildAssetUrl);
+  const withLocalModules = prepareModule
+    ? await prepareLocalModuleScripts(withLocalStyles, context, prepareModule)
+    : withLocalStyles;
+  return processHtmlContent(withLocalModules, context, buildAssetUrl);
 }

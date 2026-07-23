@@ -1,19 +1,12 @@
 import { useState } from "react";
-import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText, Copy } from "lucide-react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { openFileDialog, openFolderDialog } from "@/utils/openPreview";
 import About from "./About";
 
 export default function Header() {
-  const { file, folder, theme, setFile, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible } = useStore();
+  const { file, folder, tabs, theme, closeAllTabs, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible } = useStore();
   const [showAbout, setShowAbout] = useState(false);
-
-  const copyFilePath = async () => {
-    if (file) {
-      await writeText(file.path);
-    }
-  };
 
   const handleOpenFile = async () => {
     try {
@@ -32,7 +25,7 @@ export default function Header() {
   };
 
   const handleClose = () => {
-    setFile(null);
+    closeAllTabs();
     setFolder({ rootPath: null, tree: [], selectedPath: null });
   };
 
@@ -45,19 +38,12 @@ export default function Header() {
           </div>
           <span className="font-semibold text-sm text-text-primary">Peek</span>
         </div>
-        {file && (
+        {folder.rootPath && (
           <>
             <span className="text-border">|</span>
-            <span className="text-sm text-text-secondary truncate max-w-md" title={file.path}>
-              {file.name}
+            <span className="text-xs text-text-secondary truncate max-w-md" title={folder.rootPath}>
+              {folder.rootPath.split(/[/\\]/).pop()}
             </span>
-            <button
-              onClick={copyFilePath}
-              className="p-1 text-text-muted hover:text-text-primary transition-colors"
-              title="复制文件路径"
-            >
-              <Copy size={14} />
-            </button>
           </>
         )}
       </div>
@@ -91,11 +77,11 @@ export default function Header() {
           <FolderTree size={15} />
           <span className="hidden sm:inline">文件夹</span>
         </button>
-        {(file || folder.rootPath) && (
+        {(tabs.length > 0 || folder.rootPath) && (
           <button
             onClick={handleClose}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:text-error hover:bg-bg-tertiary transition-colors"
-            title="关闭"
+            title="关闭工作区"
           >
             <X size={15} />
           </button>

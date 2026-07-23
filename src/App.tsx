@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import FileDropZone from "@/components/FileDropZone";
 import PreviewContainer from "@/components/PreviewContainer";
+import TabBar from "@/components/TabBar";
 import { useStore } from "@/store/useStore";
 import { openPreviewPath, restoreSession } from "@/utils/openPreview";
 import { getCurrentSession, isEmptySession } from "@/utils/session";
@@ -30,7 +31,7 @@ async function consumeQueuedLaunchPaths() {
 }
 
 export default function App() {
-  const { file, setFile, setFolder, setSelectedPath } = useStore();
+  const { file, tabs, closeTab, reopenClosedTab, activateTab } = useStore();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", useStore.getState().theme);
@@ -98,7 +99,9 @@ export default function App() {
         if (event.payload.type === "drop") {
           const paths = event.payload.paths;
           if (paths.length === 0) return;
-          await openPreviewPath(paths[0]);
+          for (const path of paths) {
+            await openPreviewPath(path);
+          }
         }
       });
     };
@@ -107,7 +110,7 @@ export default function App() {
     return () => {
       if (unlisten) unlisten();
     };
-  }, [setFile, setFolder]);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -116,23 +119,48 @@ export default function App() {
         e.preventDefault();
         document.getElementById("open-file-btn")?.click();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w" && file) {
+        e.preventDefault();
+        closeTab(file.path);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        reopenClosedTab();
+        return;
+      }
+      if (e.ctrlKey && e.key === "Tab" && tabs.length > 1) {
+        e.preventDefault();
+        const currentIndex = tabs.findIndex((tab) => tab.path === file?.path);
+        const direction = e.shiftKey ? -1 : 1;
+        const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+        activateTab(tabs[nextIndex].path);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key) && tabs.length > 0) {
+        e.preventDefault();
+        const requestedIndex = Number(e.key) - 1;
+        const nextTab = tabs[Math.min(requestedIndex, tabs.length - 1)];
+        activateTab(nextTab.path);
+        return;
+      }
       if (e.key === "Escape" && file) {
         e.preventDefault();
-        setFile(null, false);
-        setSelectedPath(null);
+        closeTab(file.path);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [file, setFile, setSelectedPath]);
+  }, [activateTab, closeTab, file, reopenClosedTab, tabs]);
 
   return (
     <div className="w-full h-full flex flex-col bg-bg-primary">
       <Header />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 min-w-0 overflow-hidden flex flex-col">
+          <TabBar />
           <FileDropZone>
             <PreviewContainer />
           </FileDropZone>

@@ -60,6 +60,9 @@ export interface FolderState {
 
 interface Store {
   file: FileInfo | null;
+  tabs: FileInfo[];
+  activeTabPath: string | null;
+  closedTabs: FileInfo[];
   folder: FolderState;
   isDragging: boolean;
   theme: "dark" | "light";
@@ -67,6 +70,11 @@ interface Store {
   sidebarWidth: number;
   infoPanelVisible: boolean;
   setFile: (file: FileInfo | null, addToRecent?: boolean) => void;
+  activateTab: (path: string) => void;
+  closeTab: (path: string) => void;
+  closeOtherTabs: (path: string) => void;
+  closeAllTabs: () => void;
+  reopenClosedTab: () => void;
   setFolder: (folder: FolderState, addToRecent?: boolean) => void;
   setFolderTree: (tree: TreeNode[]) => void;
   setNodeChildren: (path: string, children: TreeNode[]) => void;
@@ -81,16 +89,26 @@ interface Store {
 
 const storedUiPreferences = getStoredUiPreferences();
 
-function buildSessionSnapshot(file: FileInfo | null, folder: FolderState): SessionSnapshot {
+function buildSessionSnapshot(
+  tabs: FileInfo[],
+  activeTabPath: string | null,
+  folder: FolderState
+): SessionSnapshot {
   return {
     rootPath: folder.rootPath,
     selectedPath: folder.selectedPath,
-    filePath: file?.path ?? null,
+    filePath: activeTabPath,
+    tabPaths: tabs.map((tab) => tab.path),
+    activeTabPath,
   };
 }
 
-function persistSession(file: FileInfo | null, folder: FolderState) {
-  const snapshot = buildSessionSnapshot(file, folder);
+function persistSession(
+  tabs: FileInfo[],
+  activeTabPath: string | null,
+  folder: FolderState
+) {
+  const snapshot = buildSessionSnapshot(tabs, activeTabPath, folder);
   saveCurrentSession(snapshot);
 
   if (snapshot.rootPath || snapshot.filePath) {
@@ -114,6 +132,9 @@ function persistUiPreferences(state: {
 
 export const useStore = create<Store>((set) => ({
   file: null,
+  tabs: [],
+  activeTabPath: null,
+  closedTabs: [],
   folder: {
     rootPath: null,
     tree: [],
@@ -129,17 +150,103 @@ export const useStore = create<Store>((set) => ({
       addRecentItem(file.path, file.name, false);
     }
     set((state) => {
-      persistSession(file, state.folder);
-      return { file };
+      if (!file) {
+        persistSession([], null, state.folder);
+        return { file: null, tabs: [], activeTabPath: null };
+      }
+
+      const existingIndex = state.tabs.findIndex((tab) => tab.path === file.path);
+      const tabs = existingIndex === -1
+        ? [...state.tabs, file]
+        : state.tabs.map((tab, index) => index === existingIndex ? file : tab);
+      const folder = { ...state.folder, selectedPath: file.path };
+
+      persistSession(tabs, file.path, folder);
+      return { file, tabs, activeTabPath: file.path, folder };
     });
   },
+  activateTab: (path) =>
+    set((state) => {
+      const file = state.tabs.find((tab) => tab.path === path);
+      if (!file) return state;
+
+      const folder = { ...state.folder, selectedPath: file.path };
+      persistSession(state.tabs, file.path, folder);
+      return { file, activeTabPath: file.path, folder };
+    }),
+  closeTab: (path) =>
+    set((state) => {
+      const closedIndex = state.tabs.findIndex((tab) => tab.path === path);
+      if (closedIndex === -1) return state;
+
+      const closedTab = state.tabs[closedIndex];
+      const tabs = state.tabs.filter((tab) => tab.path !== path);
+      const closingActiveTab = state.activeTabPath === path;
+      const nextActiveTab = closingActiveTab
+        ? tabs[Math.min(closedIndex, tabs.length - 1)] ?? null
+        : state.file;
+      const activeTabPath = nextActiveTab?.path ?? null;
+      const folder = closingActiveTab
+        ? { ...state.folder, selectedPath: activeTabPath }
+        : state.folder;
+
+      persistSession(tabs, activeTabPath, folder);
+      return {
+        file: nextActiveTab,
+        tabs,
+        activeTabPath,
+        closedTabs: [closedTab, ...state.closedTabs.filter((tab) => tab.path !== path)].slice(0, 10),
+        folder,
+      };
+    }),
+  closeOtherTabs: (path) =>
+    set((state) => {
+      const activeTab = state.tabs.find((tab) => tab.path === path);
+      if (!activeTab) return state;
+
+      const closedTabs = state.tabs.filter((tab) => tab.path !== path);
+      const tabs = [activeTab];
+      const folder = { ...state.folder, selectedPath: path };
+      persistSession(tabs, path, folder);
+      return {
+        file: activeTab,
+        tabs,
+        activeTabPath: path,
+        closedTabs: [...closedTabs.reverse(), ...state.closedTabs].slice(0, 10),
+        folder,
+      };
+    }),
+  closeAllTabs: () =>
+    set((state) => {
+      const folder = { ...state.folder, selectedPath: null };
+      persistSession([], null, folder);
+      return {
+        file: null,
+        tabs: [],
+        activeTabPath: null,
+        closedTabs: [...state.tabs].reverse().concat(state.closedTabs).slice(0, 10),
+        folder,
+      };
+    }),
+  reopenClosedTab: () =>
+    set((state) => {
+      const [tab, ...closedTabs] = state.closedTabs;
+      if (!tab) return state;
+
+      const tabs = state.tabs.some((openTab) => openTab.path === tab.path)
+        ? state.tabs
+        : [...state.tabs, tab];
+      const folder = { ...state.folder, selectedPath: tab.path };
+      persistSession(tabs, tab.path, folder);
+      return { file: tab, tabs, activeTabPath: tab.path, closedTabs, folder };
+    }),
   setFolder: (folder, addToRecent = true) => {
     if (folder.rootPath && addToRecent) {
       const name = folder.rootPath.split(/[/\\]/).pop() || folder.rootPath;
       addRecentItem(folder.rootPath, name, true);
     }
     set((state) => {
-      persistSession(state.file, folder);
+      persistSession(state.tabs, state.activeTabPath, folder);
       return { folder };
     });
   },
@@ -201,7 +308,7 @@ export const useStore = create<Store>((set) => ({
     set((state) => ({
       folder: (() => {
         const nextFolder = { ...state.folder, selectedPath: path };
-        persistSession(state.file, nextFolder);
+        persistSession(state.tabs, state.activeTabPath, nextFolder);
         return nextFolder;
       })(),
     })),
