@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { getCurrentSession } from "@/utils/session";
+import { getCurrentSession, getStoredUiPreferences } from "@/utils/session";
+import { DEFAULT_SHORTCUTS } from "@/utils/shortcuts";
 import { useStore, type FileInfo } from "@/store/useStore";
 
 const SESSION_KEY = "peek_current_session";
@@ -63,5 +64,26 @@ describe("multi-tab session", () => {
       "/workspace/a.ts",
       "/workspace/c.ts",
     ]);
+  });
+});
+
+describe("UI preference migration", () => {
+  it("adds default shortcut bindings to previous preference data", () => {
+    localStorage.setItem(
+      "peek_ui_preferences",
+      JSON.stringify({ theme: "light", sidebarVisible: false })
+    );
+
+    expect(getStoredUiPreferences()).toMatchObject({
+      theme: "light",
+      sidebarVisible: false,
+      shortcuts: DEFAULT_SHORTCUTS,
+    });
+  });
+
+  it("persists shortcut changes with the other UI preferences", () => {
+    useStore.getState().setShortcut("find", "Alt+K");
+
+    expect(getStoredUiPreferences().shortcuts.find).toBe("Alt+K");
   });
 });

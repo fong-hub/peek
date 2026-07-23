@@ -7,6 +7,11 @@ import {
   saveUiPreferences,
   type SessionSnapshot,
 } from "@/utils/session";
+import {
+  DEFAULT_SHORTCUTS,
+  type ShortcutAction,
+  type ShortcutBindings,
+} from "@/utils/shortcuts";
 
 export type PreviewType =
   | "markdown"
@@ -69,6 +74,10 @@ interface Store {
   sidebarVisible: boolean;
   sidebarWidth: number;
   infoPanelVisible: boolean;
+  searchVisible: boolean;
+  searchQuery: string;
+  activeSearchMatch: number;
+  shortcuts: ShortcutBindings;
   setFile: (file: FileInfo | null, addToRecent?: boolean) => void;
   activateTab: (path: string) => void;
   closeTab: (path: string) => void;
@@ -85,6 +94,12 @@ interface Store {
   setSelectedPath: (path: string | null) => void;
   toggleNodeExpanded: (path: string) => void;
   toggleInfoPanel: () => void;
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSearchQuery: (query: string) => void;
+  setActiveSearchMatch: (index: number) => void;
+  setShortcut: (action: ShortcutAction, shortcut: string) => void;
+  resetShortcuts: () => void;
 }
 
 const storedUiPreferences = getStoredUiPreferences();
@@ -121,12 +136,14 @@ function persistUiPreferences(state: {
   sidebarVisible: boolean;
   sidebarWidth: number;
   infoPanelVisible: boolean;
+  shortcuts: ShortcutBindings;
 }) {
   saveUiPreferences({
     theme: state.theme,
     sidebarVisible: state.sidebarVisible,
     sidebarWidth: state.sidebarWidth,
     infoPanelVisible: state.infoPanelVisible,
+    shortcuts: state.shortcuts,
   });
 }
 
@@ -145,6 +162,10 @@ export const useStore = create<Store>((set) => ({
   sidebarVisible: storedUiPreferences.sidebarVisible,
   sidebarWidth: storedUiPreferences.sidebarWidth,
   infoPanelVisible: storedUiPreferences.infoPanelVisible,
+  searchVisible: false,
+  searchQuery: "",
+  activeSearchMatch: 0,
+  shortcuts: storedUiPreferences.shortcuts,
   setFile: (file, addToRecent = true) => {
     if (file && addToRecent) {
       addRecentItem(file.path, file.name, false);
@@ -152,7 +173,14 @@ export const useStore = create<Store>((set) => ({
     set((state) => {
       if (!file) {
         persistSession([], null, state.folder);
-        return { file: null, tabs: [], activeTabPath: null };
+        return {
+          file: null,
+          tabs: [],
+          activeTabPath: null,
+          searchVisible: false,
+          searchQuery: "",
+          activeSearchMatch: 0,
+        };
       }
 
       const existingIndex = state.tabs.findIndex((tab) => tab.path === file.path);
@@ -162,7 +190,15 @@ export const useStore = create<Store>((set) => ({
       const folder = { ...state.folder, selectedPath: file.path };
 
       persistSession(tabs, file.path, folder);
-      return { file, tabs, activeTabPath: file.path, folder };
+      return {
+        file,
+        tabs,
+        activeTabPath: file.path,
+        folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
+      };
     });
   },
   activateTab: (path) =>
@@ -172,7 +208,14 @@ export const useStore = create<Store>((set) => ({
 
       const folder = { ...state.folder, selectedPath: file.path };
       persistSession(state.tabs, file.path, folder);
-      return { file, activeTabPath: file.path, folder };
+      return {
+        file,
+        activeTabPath: file.path,
+        folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
+      };
     }),
   closeTab: (path) =>
     set((state) => {
@@ -197,6 +240,9 @@ export const useStore = create<Store>((set) => ({
         activeTabPath,
         closedTabs: [closedTab, ...state.closedTabs.filter((tab) => tab.path !== path)].slice(0, 10),
         folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
       };
     }),
   closeOtherTabs: (path) =>
@@ -214,6 +260,9 @@ export const useStore = create<Store>((set) => ({
         activeTabPath: path,
         closedTabs: [...closedTabs.reverse(), ...state.closedTabs].slice(0, 10),
         folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
       };
     }),
   closeAllTabs: () =>
@@ -226,6 +275,9 @@ export const useStore = create<Store>((set) => ({
         activeTabPath: null,
         closedTabs: [...state.tabs].reverse().concat(state.closedTabs).slice(0, 10),
         folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
       };
     }),
   reopenClosedTab: () =>
@@ -238,7 +290,16 @@ export const useStore = create<Store>((set) => ({
         : [...state.tabs, tab];
       const folder = { ...state.folder, selectedPath: tab.path };
       persistSession(tabs, tab.path, folder);
-      return { file: tab, tabs, activeTabPath: tab.path, closedTabs, folder };
+      return {
+        file: tab,
+        tabs,
+        activeTabPath: tab.path,
+        closedTabs,
+        folder,
+        searchVisible: false,
+        searchQuery: "",
+        activeSearchMatch: 0,
+      };
     }),
   setFolder: (folder, addToRecent = true) => {
     if (folder.rootPath && addToRecent) {
@@ -333,5 +394,21 @@ export const useStore = create<Store>((set) => ({
       const nextState = { ...state, infoPanelVisible: !state.infoPanelVisible };
       persistUiPreferences(nextState);
       return { infoPanelVisible: nextState.infoPanelVisible };
+    }),
+  openSearch: () => set((state) => state.file ? { searchVisible: true } : state),
+  closeSearch: () => set({ searchVisible: false, activeSearchMatch: 0 }),
+  setSearchQuery: (searchQuery) => set({ searchQuery, activeSearchMatch: 0 }),
+  setActiveSearchMatch: (activeSearchMatch) => set({ activeSearchMatch }),
+  setShortcut: (action, shortcut) =>
+    set((state) => {
+      const shortcuts = { ...state.shortcuts, [action]: shortcut };
+      persistUiPreferences({ ...state, shortcuts });
+      return { shortcuts };
+    }),
+  resetShortcuts: () =>
+    set((state) => {
+      const shortcuts = { ...DEFAULT_SHORTCUTS };
+      persistUiPreferences({ ...state, shortcuts });
+      return { shortcuts };
     }),
 }));

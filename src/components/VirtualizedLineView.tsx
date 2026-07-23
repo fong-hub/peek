@@ -4,6 +4,8 @@ import {
   getVirtualWindow,
   shouldVirtualizeLines,
 } from "@/utils/virtualization";
+import { useStore } from "@/store/useStore";
+import { findLineMatches, type LineMatch } from "@/utils/search";
 
 interface Props {
   lines: string[];
@@ -18,10 +20,24 @@ export default function VirtualizedLineView({
   getLineClassName,
   wrapLines = true,
 }: Props) {
+  const { searchVisible, searchQuery, activeSearchMatch } = useStore();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(0);
   const virtualized = shouldVirtualizeLines(lines.length);
+  const searchMatches = useMemo(
+    () => searchVisible ? findLineMatches(lines, searchQuery) : [],
+    [lines, searchQuery, searchVisible]
+  );
+  const matchesByLine = useMemo(() => {
+    const byLine = new Map<number, LineMatch[]>();
+    searchMatches.forEach((match) => {
+      const current = byLine.get(match.lineIndex) ?? [];
+      current.push(match);
+      byLine.set(match.lineIndex, current);
+    });
+    return byLine;
+  }, [searchMatches]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -40,6 +56,24 @@ export default function VirtualizedLineView({
       resizeObserver.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    const activeMatch = searchMatches[activeSearchMatch];
+    const element = containerRef.current;
+    if (!activeMatch || !element) return;
+
+    if (virtualized) {
+      element.scrollTop = Math.max(
+        0,
+        activeMatch.lineIndex * DEFAULT_LINE_HEIGHT - element.clientHeight / 2
+      );
+      return;
+    }
+
+    element
+      .querySelector<HTMLElement>(`[data-search-match="${activeMatch.index}"]`)
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
+  }, [activeSearchMatch, searchMatches, virtualized]);
 
   const windowState = useMemo(
     () =>
@@ -91,7 +125,11 @@ export default function VirtualizedLineView({
               <span
                 className={`${textClassName} ${getLineClassName?.(line, actualIndex) ?? "text-text-primary"}`}
               >
-                {line || " "}
+                {renderLineWithMatches(
+                  line,
+                  matchesByLine.get(actualIndex) ?? [],
+                  activeSearchMatch
+                )}
               </span>
             </div>
           );
@@ -103,4 +141,34 @@ export default function VirtualizedLineView({
       </div>
     </div>
   );
+}
+
+function renderLineWithMatches(
+  line: string,
+  matches: LineMatch[],
+  activeMatchIndex: number
+) {
+  if (matches.length === 0) return line || " ";
+
+  const fragments: React.ReactNode[] = [];
+  let cursor = 0;
+
+  matches.forEach((match) => {
+    if (match.start > cursor) {
+      fragments.push(line.slice(cursor, match.start));
+    }
+    fragments.push(
+      <mark
+        key={match.index}
+        data-search-match={match.index}
+        className={match.index === activeMatchIndex ? "search-match-active" : "search-match"}
+      >
+        {line.slice(match.start, match.end)}
+      </mark>
+    );
+    cursor = match.end;
+  });
+
+  if (cursor < line.length) fragments.push(line.slice(cursor));
+  return fragments;
 }

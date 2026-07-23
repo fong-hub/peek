@@ -15,6 +15,7 @@ import {
   writeHtmlPreviewModuleFile,
 } from "@/utils/htmlPreviewCache";
 import { cacheLocalModuleGraph } from "@/utils/htmlModules";
+import VirtualizedLineView from "@/components/VirtualizedLineView";
 
 interface Props {
   content: string;
@@ -37,11 +38,29 @@ async function prepareModuleGraph(
 }
 
 export default function HtmlPreviewer({ content }: Props) {
-  const { file, folder, setFile } = useStore();
+  const { file, folder, searchVisible, setFile } = useStore();
   const [mode, setMode] = useState<"preview" | "source">("preview");
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [refreshKey, setRefreshKey] = useState(0);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const modeBeforeSearch = useRef<"preview" | "source">("preview");
+  const searchForcedSource = useRef(false);
+
+  useEffect(() => {
+    if (searchVisible) {
+      if (!searchForcedSource.current) {
+        modeBeforeSearch.current = mode;
+        searchForcedSource.current = true;
+      }
+      if (mode !== "source") setMode("source");
+      return;
+    }
+
+    if (!searchVisible && searchForcedSource.current) {
+      searchForcedSource.current = false;
+      setMode(modeBeforeSearch.current);
+    }
+  }, [mode, searchVisible]);
 
   const htmlContext = useMemo(
     () => ({
@@ -219,21 +238,7 @@ export default function HtmlPreviewer({ content }: Props) {
             </div>
           )
         ) : (
-          <div className="h-full overflow-auto font-mono text-sm leading-relaxed">
-            {content.split("\n").map((line, index) => (
-              <div
-                key={index}
-                className="flex px-2 py-0.5 hover:bg-bg-secondary/30 transition-colors"
-              >
-                <span className="text-text-muted select-none w-12 text-right mr-3 flex-shrink-0 text-xs pt-0.5">
-                  {index + 1}
-                </span>
-                <span className="text-text-primary whitespace-pre-wrap break-all">
-                  {line || " "}
-                </span>
-              </div>
-            ))}
-          </div>
+          <VirtualizedLineView lines={content.split("\n")} />
         )}
       </div>
     </div>

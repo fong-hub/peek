@@ -1,3 +1,9 @@
+import {
+  DEFAULT_SHORTCUTS,
+  normalizeShortcutBindings,
+  type ShortcutBindings,
+} from "@/utils/shortcuts";
+
 export type ThemeMode = "dark" | "light";
 
 export interface UiPreferences {
@@ -5,6 +11,7 @@ export interface UiPreferences {
   sidebarVisible: boolean;
   sidebarWidth: number;
   infoPanelVisible: boolean;
+  shortcuts: ShortcutBindings;
 }
 
 export interface SessionSnapshot {
@@ -24,6 +31,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   sidebarVisible: true,
   sidebarWidth: 256,
   infoPanelVisible: true,
+  shortcuts: DEFAULT_SHORTCUTS,
 };
 
 export const EMPTY_SESSION: SessionSnapshot = {
@@ -65,6 +73,7 @@ export function getStoredUiPreferences(): UiPreferences {
     infoPanelVisible: typeof parsed?.infoPanelVisible === "boolean"
       ? parsed.infoPanelVisible
       : DEFAULT_UI_PREFERENCES.infoPanelVisible,
+    shortcuts: normalizeShortcutBindings(parsed?.shortcuts),
   };
 }
 

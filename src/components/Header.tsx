@@ -1,12 +1,17 @@
 import { useState } from "react";
-import { FolderOpen, FolderTree, Moon, PanelLeft, Sun, X, Info, FileText } from "lucide-react";
+import { FolderOpen, FolderTree, Moon, PanelLeft, Search, Settings, Sun, X, Info, FileText } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { openFileDialog, openFolderDialog } from "@/utils/openPreview";
 import About from "./About";
+import ShortcutSettings from "./ShortcutSettings";
+import { formatShortcut } from "@/utils/shortcuts";
+import { getSearchableContent } from "@/utils/search";
 
 export default function Header() {
-  const { file, folder, tabs, theme, closeAllTabs, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible } = useStore();
+  const { file, folder, tabs, theme, shortcuts, closeAllTabs, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible, openSearch } = useStore();
   const [showAbout, setShowAbout] = useState(false);
+  const [showShortcutSettings, setShowShortcutSettings] = useState(false);
+  const canSearch = file ? getSearchableContent(file) !== null : false;
 
   const handleOpenFile = async () => {
     try {
@@ -60,10 +65,20 @@ export default function Header() {
           <PanelLeft size={15} />
         </button>
         <button
+          type="button"
+          onClick={openSearch}
+          disabled={!canSearch}
+          className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-35"
+          title={`搜索当前文件 (${formatShortcut(shortcuts.find)})`}
+        >
+          <Search size={15} />
+          <span className="hidden md:inline">搜索</span>
+        </button>
+        <button
           id="open-file-btn"
           onClick={handleOpenFile}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-          title="打开文件 (Ctrl+O)"
+          title={`打开文件 (${formatShortcut(shortcuts.openFile)})`}
         >
           <FolderOpen size={15} />
           <span className="hidden sm:inline">文件</span>
@@ -107,6 +122,15 @@ export default function Header() {
           </button>
         )}
         <button
+          type="button"
+          onClick={() => setShowShortcutSettings(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+          title="快捷键设置"
+          aria-label="快捷键设置"
+        >
+          <Settings size={15} />
+        </button>
+        <button
           onClick={() => setShowAbout(true)}
           className="flex items-center justify-center w-8 h-8 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
           title="关于 Peek"
@@ -115,6 +139,9 @@ export default function Header() {
         </button>
       </div>
       {showAbout && <About onClose={() => setShowAbout(false)} />}
+      {showShortcutSettings && (
+        <ShortcutSettings onClose={() => setShowShortcutSettings(false)} />
+      )}
     </header>
   );
 }

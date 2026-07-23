@@ -10,6 +10,7 @@ import TabBar from "@/components/TabBar";
 import { useStore } from "@/store/useStore";
 import { openPreviewPath, restoreSession } from "@/utils/openPreview";
 import { getCurrentSession, isEmptySession } from "@/utils/session";
+import { matchesShortcut } from "@/utils/shortcuts";
 
 let appBootstrapped = false;
 const CLI_EVENT_NAME = "cli-launch-requested";
@@ -31,7 +32,17 @@ async function consumeQueuedLaunchPaths() {
 }
 
 export default function App() {
-  const { file, tabs, closeTab, reopenClosedTab, activateTab } = useStore();
+  const {
+    file,
+    tabs,
+    shortcuts,
+    searchVisible,
+    closeSearch,
+    openSearch,
+    closeTab,
+    reopenClosedTab,
+    activateTab,
+  } = useStore();
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", useStore.getState().theme);
@@ -115,24 +126,42 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "o") {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("[data-shortcut-capture='true']")) return;
+      if (target?.closest("[role='dialog']")) return;
+
+      if (matchesShortcut(e, shortcuts.find)) {
+        e.preventDefault();
+        openSearch();
+        return;
+      }
+
+      const isEditable = target?.matches("input, textarea, select, [contenteditable='true']");
+      if (isEditable) return;
+
+      if (matchesShortcut(e, shortcuts.openFile)) {
         e.preventDefault();
         document.getElementById("open-file-btn")?.click();
+        return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w" && file) {
+      if (matchesShortcut(e, shortcuts.closeTab) && file) {
         e.preventDefault();
         closeTab(file.path);
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "t") {
+      if (matchesShortcut(e, shortcuts.reopenClosedTab)) {
         e.preventDefault();
         reopenClosedTab();
         return;
       }
-      if (e.ctrlKey && e.key === "Tab" && tabs.length > 1) {
+      if (
+        (matchesShortcut(e, shortcuts.nextTab)
+          || matchesShortcut(e, shortcuts.previousTab))
+        && tabs.length > 1
+      ) {
         e.preventDefault();
         const currentIndex = tabs.findIndex((tab) => tab.path === file?.path);
-        const direction = e.shiftKey ? -1 : 1;
+        const direction = matchesShortcut(e, shortcuts.previousTab) ? -1 : 1;
         const nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
         activateTab(tabs[nextIndex].path);
         return;
@@ -144,6 +173,11 @@ export default function App() {
         activateTab(nextTab.path);
         return;
       }
+      if (e.key === "Escape" && searchVisible) {
+        e.preventDefault();
+        closeSearch();
+        return;
+      }
       if (e.key === "Escape" && file) {
         e.preventDefault();
         closeTab(file.path);
@@ -152,7 +186,17 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activateTab, closeTab, file, reopenClosedTab, tabs]);
+  }, [
+    activateTab,
+    closeSearch,
+    closeTab,
+    file,
+    openSearch,
+    reopenClosedTab,
+    searchVisible,
+    shortcuts,
+    tabs,
+  ]);
 
   return (
     <div className="w-full h-full flex flex-col bg-bg-primary">

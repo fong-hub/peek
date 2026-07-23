@@ -78,6 +78,22 @@ body {
   background-color: rgba(59, 130, 246, 0.3);
 }
 
+.search-match,
+.search-match-active {
+  border-radius: 2px;
+  color: inherit;
+}
+
+.search-match {
+  background: color-mix(in srgb, var(--color-warning) 38%, transparent);
+}
+
+.search-match-active {
+  background: var(--color-warning);
+  color: #111111;
+  outline: 1px solid color-mix(in srgb, var(--color-warning) 72%, white);
+}
+
 /* Markdown preview styles */
 .markdown-preview h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 1rem; margin-top: 1.5rem; color: var(--color-text-primary); }
 .markdown-preview h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.875rem; margin-top: 1.25rem; color: var(--color-text-primary); }

@@ -11,6 +11,7 @@ import ImagePreviewer from "@/previewers/ImagePreviewer";
 import PdfPreviewer from "@/previewers/PdfPreviewer";
 import UnsupportedPreviewer from "@/previewers/UnsupportedPreviewer";
 import type { FileInfo, PreviewType } from "@/store/useStore";
+import SearchBar from "./SearchBar";
 
 export default function PreviewContainer() {
   const { file } = useStore();
@@ -22,6 +23,7 @@ export default function PreviewContainer() {
   return (
     <div className="w-full h-full flex flex-col">
       <FileInfoPanel />
+      <SearchBar />
       <div className="flex-1 overflow-hidden">
         {renderPreviewer(file)}
       </div>

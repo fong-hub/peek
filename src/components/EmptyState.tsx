@@ -9,15 +9,18 @@ import {
   restoreSession,
 } from "@/utils/openPreview";
 import { getLastSession, isEmptySession } from "@/utils/session";
+import { useStore } from "@/store/useStore";
+import { formatShortcut } from "@/utils/shortcuts";
 
 export default function EmptyState() {
+  const { shortcuts } = useStore();
   const lastSession = useMemo(() => getLastSession(), []);
   const recentItems = useMemo(() => getRecentItems().slice(0, 5), []);
   const hasLastSession = !isEmptySession(lastSession);
 
   return (
     <div className="w-full h-full overflow-auto bg-bg-primary">
-      <div className="mx-auto flex h-full max-w-5xl flex-col justify-center gap-8 px-6 py-10 text-text-secondary">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center gap-8 px-6 py-10 text-text-secondary">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-tertiary">
@@ -95,7 +98,7 @@ export default function EmptyState() {
         <div className="flex flex-wrap gap-6 text-xs text-text-muted">
           <div className="flex items-center gap-1.5">
             <Keyboard size={13} />
-            <span>Ctrl / Cmd + O 打开文件</span>
+            <span>{formatShortcut(shortcuts.openFile)} 打开文件</span>
           </div>
           <div className="flex items-center gap-1.5">
             <FolderOpen size={13} />

@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
-import { ArrowDownAZ, ArrowUpAZ, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownAZ, ArrowUpAZ } from "lucide-react";
 import { parseCsvContent } from "@/utils/csv";
+import { useStore } from "@/store/useStore";
+import { findTextMatches, type TextMatch } from "@/utils/search";
 
 interface Props {
   content: string;
@@ -22,31 +24,53 @@ function compareCsvValues(left: string, right: string): number {
 }
 
 export default function CsvPreviewer({ content }: Props) {
-  const [query, setQuery] = useState("");
+  const { searchVisible, searchQuery, activeSearchMatch } = useStore();
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const parsed = useMemo(() => parseCsvContent(content), [content]);
-  const filteredRows = useMemo(() => {
-    const loweredQuery = query.trim().toLowerCase();
-    const baseRows = loweredQuery
-      ? parsed.rows.filter((row) =>
-          row.some((cell) => cell.toLowerCase().includes(loweredQuery))
-        )
-      : parsed.rows;
-
+  const displayedRows = useMemo(() => {
+    const baseRows = parsed.rows.map((cells, sourceIndex) => ({ cells, sourceIndex }));
     if (sortColumn === null) {
       return baseRows;
     }
 
     return [...baseRows].sort((left, right) => {
       const result = compareCsvValues(
-        left[sortColumn] ?? "",
-        right[sortColumn] ?? ""
+        left.cells[sortColumn] ?? "",
+        right.cells[sortColumn] ?? ""
       );
       return sortDirection === "asc" ? result : -result;
     });
-  }, [parsed.rows, query, sortColumn, sortDirection]);
+  }, [parsed.rows, sortColumn, sortDirection]);
+  const matchesByCell = useMemo(() => {
+    const matches = new Map<string, Array<TextMatch & { index: number }>>();
+    let matchIndex = 0;
+
+    const addCell = (id: string, value: string) => {
+      const cellMatches = searchVisible ? findTextMatches(value, searchQuery) : [];
+      matches.set(
+        id,
+        cellMatches.map((match) => ({ ...match, index: matchIndex++ }))
+      );
+    };
+
+    parsed.headers.forEach((header, columnIndex) => {
+      addCell(`h-${columnIndex}`, header || `列 ${columnIndex + 1}`);
+    });
+    parsed.rows.forEach((row, rowIndex) => {
+      row.forEach((cell, columnIndex) => addCell(`r-${rowIndex}-${columnIndex}`, cell));
+    });
+
+    return matches;
+  }, [parsed.headers, parsed.rows, searchQuery, searchVisible]);
+
+  useEffect(() => {
+    scrollRef.current
+      ?.querySelector<HTMLElement>(`[data-search-match="${activeSearchMatch}"]`)
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
+  }, [activeSearchMatch, matchesByCell]);
 
   if (parsed.columnCount === 0) {
     return (
@@ -58,24 +82,11 @@ export default function CsvPreviewer({ content }: Props) {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex items-center justify-between gap-4 border-b border-border bg-bg-secondary px-4 py-2">
+      <div className="flex items-center border-b border-border bg-bg-secondary px-4 py-2">
         <div className="text-xs text-text-muted">
           {parsed.rows.length} 行数据
           {parsed.hasHeader ? "，已识别首行为表头" : "，未识别到表头"}
           {parsed.delimiter === "\t" ? "，分隔符: TAB" : `，分隔符: ${parsed.delimiter}`}
-        </div>
-        <div className="relative w-full max-w-xs">
-          <Search
-            size={13}
-            className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索单元格..."
-            className="w-full rounded-md border border-transparent bg-bg-tertiary py-1.5 pl-7 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          />
         </div>
       </div>
 
@@ -85,7 +96,7 @@ export default function CsvPreviewer({ content }: Props) {
         </div>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <div ref={scrollRef} className="flex-1 overflow-auto">
         <table className="min-w-full border-collapse text-sm">
           <thead className="sticky top-0 z-10 bg-bg-secondary">
             <tr>
@@ -113,7 +124,13 @@ export default function CsvPreviewer({ content }: Props) {
                       }}
                       className="flex items-center gap-1.5 hover:text-accent transition-colors"
                     >
-                      <span>{header || `列 ${index + 1}`}</span>
+                      <span>
+                        {renderCellMatches(
+                          header || `列 ${index + 1}`,
+                          matchesByCell.get(`h-${index}`) ?? [],
+                          activeSearchMatch
+                        )}
+                      </span>
                       {active ? (
                         sortDirection === "asc" ? (
                           <ArrowUpAZ size={13} />
@@ -128,9 +145,9 @@ export default function CsvPreviewer({ content }: Props) {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row, rowIndex) => (
+            {displayedRows.map(({ cells: row, sourceIndex }, rowIndex) => (
               <tr
-                key={`${rowIndex}-${row.join("|")}`}
+                key={`${sourceIndex}-${row.join("|")}`}
                 className={rowIndex % 2 === 0 ? "bg-bg-primary" : "bg-bg-secondary/20"}
               >
                 <td className="border-b border-border/60 px-3 py-2 align-top text-xs text-text-muted">
@@ -142,7 +159,11 @@ export default function CsvPreviewer({ content }: Props) {
                     className="border-b border-border/60 px-3 py-2 align-top text-text-secondary"
                   >
                     <span className="whitespace-pre-wrap break-all">
-                      {cell || " "}
+                      {renderCellMatches(
+                        cell,
+                        matchesByCell.get(`r-${sourceIndex}-${cellIndex}`) ?? [],
+                        activeSearchMatch
+                      )}
                     </span>
                   </td>
                 ))}
@@ -151,12 +172,35 @@ export default function CsvPreviewer({ content }: Props) {
           </tbody>
         </table>
 
-        {filteredRows.length === 0 && (
-          <div className="px-4 py-8 text-center text-sm text-text-muted">
-            没有匹配的数据
-          </div>
-        )}
       </div>
     </div>
   );
+}
+
+function renderCellMatches(
+  value: string,
+  matches: Array<TextMatch & { index: number }>,
+  activeMatchIndex: number
+) {
+  if (matches.length === 0) return value || " ";
+
+  const fragments: React.ReactNode[] = [];
+  let cursor = 0;
+
+  matches.forEach((match) => {
+    if (match.start > cursor) fragments.push(value.slice(cursor, match.start));
+    fragments.push(
+      <mark
+        key={match.index}
+        data-search-match={match.index}
+        className={match.index === activeMatchIndex ? "search-match-active" : "search-match"}
+      >
+        {value.slice(match.start, match.end)}
+      </mark>
+    );
+    cursor = match.end;
+  });
+
+  if (cursor < value.length) fragments.push(value.slice(cursor));
+  return fragments;
 }
