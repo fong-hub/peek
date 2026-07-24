@@ -86,4 +86,12 @@ describe("UI preference migration", () => {
 
     expect(getStoredUiPreferences().shortcuts.find).toBe("Alt+K");
   });
+
+  it("clamps and persists the terminal height", () => {
+    useStore.getState().setTerminalHeight(900);
+    expect(getStoredUiPreferences().terminalHeight).toBe(720);
+
+    useStore.getState().setTerminalHeight(80);
+    expect(getStoredUiPreferences().terminalHeight).toBe(120);
+  });
 });

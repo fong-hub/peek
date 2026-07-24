@@ -25,16 +25,19 @@ Peek 是一款基于 Tauri + React 的本地开发者文件预览器，聚焦 Ma
 - ✅ **HTML 双模式**: 渲染预览与源码查看一键切换
 - ✅ **多标签预览**: 同时打开多个文件，支持切换、批量关闭和恢复关闭页签
 - ✅ **文件内搜索**: 支持文本、日志、JSON、Markdown、HTML、CSV 的匹配高亮与结果跳转
+- ✅ **集成终端**: 底部真实 PTY 终端，跟随当前项目目录，可拖拽并记忆面板高度
+- ✅ **Git 项目状态**: 自动识别 Git 仓库，展示分支、工作区状态与领先/落后提交数
+- ✅ **一键拉取代码**: 对已配置上游的分支执行安全的 `git pull --ff-only`，结果同步输出到终端
 - ✅ **日志高亮**: 行号展示，ERROR/WARN/INFO/DEBUG 级别颜色区分
 - ✅ **最近打开与恢复**: 支持最近记录、恢复上次工作区
-- ✅ **界面状态记忆**: 记住主题、侧边栏宽度、信息面板状态
+- ✅ **界面状态记忆**: 记住主题、侧边栏宽度、信息面板状态与终端高度
 - ✅ **命令行打开**: 支持 `peek <path>` / `peek open <path>` / `peek --help` / `peek --version`
 - ✅ **CLI 单实例转发**: 已启动时再次执行 `peek` 会复用当前窗口并切换到目标路径
 - ✅ **懒加载文件树**: 展开目录时按需读取，打开大型项目更轻
 - ✅ **大文件模式**: 超过阈值自动切换轻量预览，优先保证打开速度
 - ✅ **虚拟滚动**: 文本 / JSON / 日志视图按需渲染，万行内容也能顺滑浏览
 - ✅ **深色/浅色主题**: 一键切换，全程无闪烁
-- ✅ **可配置快捷键**: 支持自定义打开、搜索、关闭和页签切换快捷键，Ctrl/Cmd + F 默认打开搜索框
+- ✅ **可配置快捷键**: 支持自定义打开、搜索、终端、关闭和页签切换快捷键；Ctrl/Cmd + F 搜索，Ctrl/Cmd + J 切换终端
 
 ## 项目结构
 
@@ -46,6 +49,8 @@ peek/
 │   ├── index.css                 # 全局样式 + Tailwind
 │   ├── components/               # UI 组件
 │   │   ├── Header.tsx            # 顶部栏（打开/关闭/主题）
+│   │   ├── GitStatusControl.tsx  # Git 状态与拉取操作
+│   │   ├── TerminalPanel.tsx     # 底部集成终端
 │   │   ├── Sidebar.tsx           # 左侧文件树
 │   │   ├── EmptyState.tsx        # 空状态引导
 │   │   ├── FileDropZone.tsx      # 文件拖拽区域
@@ -66,6 +71,8 @@ peek/
 │       └── fileTypes.ts          # 文件类型检测工具
 ├── src-tauri/                    # Tauri Rust 后端
 │   ├── src/main.rs               # 主进程入口
+│   ├── src/git.rs                # Git 仓库检测与拉取
+│   ├── src/terminal.rs           # PTY 终端会话管理
 │   ├── Cargo.toml
 │   ├── tauri.conf.json           # Tauri 配置
 │   └── capabilities/default.json # 权限声明

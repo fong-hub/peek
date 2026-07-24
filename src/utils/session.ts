@@ -11,6 +11,7 @@ export interface UiPreferences {
   sidebarVisible: boolean;
   sidebarWidth: number;
   infoPanelVisible: boolean;
+  terminalHeight: number;
   shortcuts: ShortcutBindings;
 }
 
@@ -31,6 +32,7 @@ export const DEFAULT_UI_PREFERENCES: UiPreferences = {
   sidebarVisible: true,
   sidebarWidth: 256,
   infoPanelVisible: true,
+  terminalHeight: 240,
   shortcuts: DEFAULT_SHORTCUTS,
 };
 
@@ -73,6 +75,9 @@ export function getStoredUiPreferences(): UiPreferences {
     infoPanelVisible: typeof parsed?.infoPanelVisible === "boolean"
       ? parsed.infoPanelVisible
       : DEFAULT_UI_PREFERENCES.infoPanelVisible,
+    terminalHeight: typeof parsed?.terminalHeight === "number"
+      ? Math.max(120, Math.min(720, parsed.terminalHeight))
+      : DEFAULT_UI_PREFERENCES.terminalHeight,
     shortcuts: normalizeShortcutBindings(parsed?.shortcuts),
   };
 }

@@ -63,6 +63,12 @@ export interface FolderState {
   selectedPath: string | null;
 }
 
+export interface TerminalNotice {
+  id: number;
+  kind: "command" | "success" | "error";
+  text: string;
+}
+
 interface Store {
   file: FileInfo | null;
   tabs: FileInfo[];
@@ -77,6 +83,9 @@ interface Store {
   searchVisible: boolean;
   searchQuery: string;
   activeSearchMatch: number;
+  terminalVisible: boolean;
+  terminalHeight: number;
+  terminalNotices: TerminalNotice[];
   shortcuts: ShortcutBindings;
   setFile: (file: FileInfo | null, addToRecent?: boolean) => void;
   activateTab: (path: string) => void;
@@ -98,6 +107,11 @@ interface Store {
   closeSearch: () => void;
   setSearchQuery: (query: string) => void;
   setActiveSearchMatch: (index: number) => void;
+  toggleTerminal: () => void;
+  setTerminalVisible: (visible: boolean) => void;
+  setTerminalHeight: (height: number) => void;
+  appendTerminalNotice: (kind: TerminalNotice["kind"], text: string) => void;
+  dismissTerminalNotice: (id: number) => void;
   setShortcut: (action: ShortcutAction, shortcut: string) => void;
   resetShortcuts: () => void;
 }
@@ -136,6 +150,7 @@ function persistUiPreferences(state: {
   sidebarVisible: boolean;
   sidebarWidth: number;
   infoPanelVisible: boolean;
+  terminalHeight: number;
   shortcuts: ShortcutBindings;
 }) {
   saveUiPreferences({
@@ -143,9 +158,12 @@ function persistUiPreferences(state: {
     sidebarVisible: state.sidebarVisible,
     sidebarWidth: state.sidebarWidth,
     infoPanelVisible: state.infoPanelVisible,
+    terminalHeight: state.terminalHeight,
     shortcuts: state.shortcuts,
   });
 }
+
+let nextTerminalNoticeId = 1;
 
 export const useStore = create<Store>((set) => ({
   file: null,
@@ -165,6 +183,9 @@ export const useStore = create<Store>((set) => ({
   searchVisible: false,
   searchQuery: "",
   activeSearchMatch: 0,
+  terminalVisible: false,
+  terminalHeight: storedUiPreferences.terminalHeight,
+  terminalNotices: [],
   shortcuts: storedUiPreferences.shortcuts,
   setFile: (file, addToRecent = true) => {
     if (file && addToRecent) {
@@ -399,6 +420,25 @@ export const useStore = create<Store>((set) => ({
   closeSearch: () => set({ searchVisible: false, activeSearchMatch: 0 }),
   setSearchQuery: (searchQuery) => set({ searchQuery, activeSearchMatch: 0 }),
   setActiveSearchMatch: (activeSearchMatch) => set({ activeSearchMatch }),
+  toggleTerminal: () => set((state) => ({ terminalVisible: !state.terminalVisible })),
+  setTerminalVisible: (terminalVisible) => set({ terminalVisible }),
+  setTerminalHeight: (height) =>
+    set((state) => {
+      const terminalHeight = Math.max(120, Math.min(720, height));
+      persistUiPreferences({ ...state, terminalHeight });
+      return { terminalHeight };
+    }),
+  appendTerminalNotice: (kind, text) =>
+    set((state) => ({
+      terminalNotices: [
+        ...state.terminalNotices,
+        { id: nextTerminalNoticeId++, kind, text },
+      ].slice(-20),
+    })),
+  dismissTerminalNotice: (id) =>
+    set((state) => ({
+      terminalNotices: state.terminalNotices.filter((notice) => notice.id !== id),
+    })),
   setShortcut: (action, shortcut) =>
     set((state) => {
       const shortcuts = { ...state.shortcuts, [action]: shortcut };

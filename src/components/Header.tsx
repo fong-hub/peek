@@ -1,14 +1,31 @@
 import { useState } from "react";
-import { FolderOpen, FolderTree, Moon, PanelLeft, Search, Settings, Sun, X, Info, FileText } from "lucide-react";
+import { FileText, FolderOpen, FolderTree, Info, Moon, PanelLeft, Search, Settings, SquareTerminal, Sun, X } from "lucide-react";
 import { useStore } from "@/store/useStore";
 import { openFileDialog, openFolderDialog } from "@/utils/openPreview";
 import About from "./About";
 import ShortcutSettings from "./ShortcutSettings";
 import { formatShortcut } from "@/utils/shortcuts";
 import { getSearchableContent } from "@/utils/search";
+import GitStatusControl from "./GitStatusControl";
 
 export default function Header() {
-  const { file, folder, tabs, theme, shortcuts, closeAllTabs, setFolder, toggleTheme, toggleSidebar, sidebarVisible, toggleInfoPanel, infoPanelVisible, openSearch } = useStore();
+  const {
+    file,
+    folder,
+    tabs,
+    theme,
+    shortcuts,
+    terminalVisible,
+    closeAllTabs,
+    setFolder,
+    toggleTheme,
+    toggleSidebar,
+    toggleTerminal,
+    sidebarVisible,
+    toggleInfoPanel,
+    infoPanelVisible,
+    openSearch,
+  } = useStore();
   const [showAbout, setShowAbout] = useState(false);
   const [showShortcutSettings, setShowShortcutSettings] = useState(false);
   const canSearch = file ? getSearchableContent(file) !== null : false;
@@ -36,8 +53,8 @@ export default function Header() {
 
   return (
     <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-bg-secondary flex-shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <div className="w-6 h-6 rounded-md bg-accent flex items-center justify-center">
             <span className="text-white text-xs font-bold">P</span>
           </div>
@@ -51,8 +68,9 @@ export default function Header() {
             </span>
           </>
         )}
+        <GitStatusControl />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-shrink-0 items-center gap-1">
         <button
           onClick={toggleSidebar}
           className={`flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
@@ -63,6 +81,20 @@ export default function Header() {
           title="切换侧边栏"
         >
           <PanelLeft size={15} />
+        </button>
+        <button
+          type="button"
+          onClick={toggleTerminal}
+          className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors ${
+            terminalVisible
+              ? "bg-accent/10 text-accent"
+              : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+          }`}
+          title={`切换终端 (${formatShortcut(shortcuts.toggleTerminal)})`}
+          aria-pressed={terminalVisible}
+        >
+          <SquareTerminal size={15} />
+          <span className="hidden lg:inline">终端</span>
         </button>
         <button
           type="button"

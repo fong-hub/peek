@@ -1,6 +1,7 @@
 export const SHORTCUT_ACTIONS = [
   "openFile",
   "find",
+  "toggleTerminal",
   "closeTab",
   "reopenClosedTab",
   "nextTab",
@@ -13,6 +14,7 @@ export type ShortcutBindings = Record<ShortcutAction, string>;
 export const DEFAULT_SHORTCUTS: ShortcutBindings = {
   openFile: "Mod+O",
   find: "Mod+F",
+  toggleTerminal: "Mod+J",
   closeTab: "Mod+W",
   reopenClosedTab: "Mod+Shift+T",
   nextTab: "Ctrl+Tab",

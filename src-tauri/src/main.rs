@@ -7,6 +7,9 @@ use std::sync::Mutex;
 
 use tauri::{Emitter, Manager, State};
 
+mod git;
+mod terminal;
+
 const CLI_EVENT_NAME: &str = "cli-launch-requested";
 
 struct PendingLaunchPaths(Mutex<Vec<String>>);
@@ -59,7 +62,11 @@ fn take_launch_paths(state: State<PendingLaunchPaths>) -> Vec<String> {
 
 fn resolve_existing_path(arg: OsString, cwd: &Path) -> Option<String> {
     let path = PathBuf::from(arg);
-    let resolved = if path.is_absolute() { path } else { cwd.join(path) };
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    };
 
     if !resolved.exists() {
         return None;
@@ -263,6 +270,7 @@ fn main() {
 
     builder
         .manage(PendingLaunchPaths(Mutex::new(initial_launch_paths)))
+        .manage(terminal::TerminalState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -271,7 +279,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             open_path,
             get_system_info,
-            take_launch_paths
+            take_launch_paths,
+            terminal::start_terminal,
+            terminal::write_terminal,
+            terminal::resize_terminal,
+            terminal::close_terminal,
+            git::get_git_repository_info,
+            git::git_pull
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -289,13 +303,19 @@ mod tests {
     fn collect_launch_paths_filters_missing_entries() {
         let file_path = create_temp_file();
         let cwd = std::env::temp_dir();
-        let result = collect_launch_paths(vec![
-            OsString::from("/path/does/not/exist"),
-            file_path.clone().into_os_string(),
-        ], &cwd);
+        let result = collect_launch_paths(
+            vec![
+                OsString::from("/path/does/not/exist"),
+                file_path.clone().into_os_string(),
+            ],
+            &cwd,
+        );
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], fs::canonicalize(&file_path).unwrap().to_string_lossy());
+        assert_eq!(
+            result[0],
+            fs::canonicalize(&file_path).unwrap().to_string_lossy()
+        );
 
         let _ = fs::remove_file(file_path);
     }
@@ -314,7 +334,10 @@ mod tests {
 
         match result {
             CliAction::Launch(paths) => {
-                assert_eq!(paths, vec![fs::canonicalize(file_path).unwrap().to_string_lossy()]);
+                assert_eq!(
+                    paths,
+                    vec![fs::canonicalize(file_path).unwrap().to_string_lossy()]
+                );
             }
             CliAction::Help | CliAction::Version => panic!("unexpected cli action"),
         }

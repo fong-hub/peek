@@ -84,6 +84,18 @@ body {
   color: inherit;
 }
 
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  scrollbar-color: var(--color-text-muted) transparent;
+}
+
+.terminal-host .xterm-screen {
+  letter-spacing: 0;
+}
+
 .search-match {
   background: color-mix(in srgb, var(--color-warning) 38%, transparent);
 }

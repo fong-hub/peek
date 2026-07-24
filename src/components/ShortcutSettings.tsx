@@ -16,6 +16,7 @@ interface Props {
 const ACTION_LABELS: Record<ShortcutAction, string> = {
   openFile: "打开文件",
   find: "搜索当前文件",
+  toggleTerminal: "切换终端",
   closeTab: "关闭当前页签",
   reopenClosedTab: "重新打开关闭的页签",
   nextTab: "下一个页签",

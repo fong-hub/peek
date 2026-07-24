@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -11,6 +11,8 @@ import { useStore } from "@/store/useStore";
 import { openPreviewPath, restoreSession } from "@/utils/openPreview";
 import { getCurrentSession, isEmptySession } from "@/utils/session";
 import { matchesShortcut } from "@/utils/shortcuts";
+
+const TerminalPanel = lazy(() => import("@/components/TerminalPanel"));
 
 let appBootstrapped = false;
 const CLI_EVENT_NAME = "cli-launch-requested";
@@ -37,8 +39,10 @@ export default function App() {
     tabs,
     shortcuts,
     searchVisible,
+    terminalVisible,
     closeSearch,
     openSearch,
+    toggleTerminal,
     closeTab,
     reopenClosedTab,
     activateTab,
@@ -135,6 +139,11 @@ export default function App() {
         openSearch();
         return;
       }
+      if (matchesShortcut(e, shortcuts.toggleTerminal)) {
+        e.preventDefault();
+        toggleTerminal();
+        return;
+      }
 
       const isEditable = target?.matches("input, textarea, select, [contenteditable='true']");
       if (isEditable) return;
@@ -196,6 +205,7 @@ export default function App() {
     searchVisible,
     shortcuts,
     tabs,
+    toggleTerminal,
   ]);
 
   return (
@@ -208,6 +218,17 @@ export default function App() {
           <FileDropZone>
             <PreviewContainer />
           </FileDropZone>
+          {terminalVisible && (
+            <Suspense
+              fallback={
+                <div className="h-32 flex-shrink-0 border-t border-border bg-bg-primary px-3 py-2 text-xs text-text-muted">
+                  终端加载中…
+                </div>
+              }
+            >
+              <TerminalPanel />
+            </Suspense>
+          )}
         </main>
       </div>
     </div>
