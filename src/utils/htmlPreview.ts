@@ -1,3 +1,5 @@
+import { installHtmlPreviewRuntime } from "./htmlPreviewRuntime";
+
 export interface HtmlPreviewContext {
   filePath?: string | null;
   rootPath?: string | null;
@@ -156,7 +158,31 @@ export function resolveHtmlResourceUrl(
   }
 
   const suffixMatch = rawUrl.trim().match(/(?:\?[^#]*)?(?:#.*)?$/);
-  return buildAssetUrl(localPath) + (suffixMatch?.[0] ?? "");
+  const result = new URL(buildAssetUrl(localPath));
+  const suffix = new URL(suffixMatch?.[0] || "", "https://peek.invalid/");
+  suffix.searchParams.forEach((value, key) => {
+    if (key !== "__peek_reload") result.searchParams.append(key, value);
+  });
+  result.hash = suffix.hash;
+  return result.href;
+}
+
+/** Preserve directory separators while retaining escaping for filename characters. */
+export function toHtmlAssetUrl(filePath: string, buildAssetUrl: AssetUrlBuilder): string {
+  const url = new URL(buildAssetUrl(filePath));
+  url.pathname = filePath.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/");
+  return url.href;
+}
+
+export function withHtmlNavigationSuffix(previewUrl: string, sourceUrl: string): string {
+  const source = new URL(sourceUrl, "https://peek.invalid/");
+  const preview = new URL(previewUrl);
+  // Retain the preview cache generation as well as the author's query parameters.
+  source.searchParams.forEach((value, key) => {
+    if (key !== "__peek_reload") preview.searchParams.append(key, value);
+  });
+  preview.hash = source.hash;
+  return preview.href;
 }
 
 export function rewriteCssUrls(
@@ -186,188 +212,6 @@ export function rewriteCssUrls(
 
   return rewritten;
 }
-
-/** 注入 iframe 的脚本：拦截所有本地导航并通知父窗口 */
-const NAVIGATION_INTERCEPT_SCRIPT = `
-<script>
-(function() {
-  function isAssetUrl(url) {
-    return /^asset:/i.test(url)
-      || /^https?:\\/\\/asset\\.localhost\\//i.test(url);
-  }
-  function isLocalUrl(url) {
-    return url
-      && !isAssetUrl(url)
-      && !url.match(/^https?:/i)
-      && !url.match(/^data:/i)
-      && !url.match(/^javascript:/i)
-      && !url.match(/^mailto:/i)
-      && !url.match(/^tel:/i)
-      && !url.match(/^blob:/i)
-      && !url.match(/^\\/\\//);
-  }
-  function notifyNavigate(url) {
-    window.parent.postMessage({ type: 'peek-navigate', url: url }, '*');
-  }
-
-  document.addEventListener('click', function(e) {
-    var el = e.target;
-    while (el && el !== document.body) {
-      if (el.tagName === 'A') {
-        var rawHref = el.getAttribute('href') || el.href;
-        if (!rawHref) return;
-
-        if (isLocalUrl(rawHref)) {
-          e.preventDefault();
-          e.stopPropagation();
-          notifyNavigate(rawHref);
-          return false;
-        }
-
-        return;
-      }
-      el = el.parentElement;
-    }
-  }, true);
-
-  document.addEventListener('submit', function(e) {
-    var form = e.target;
-    var rawAction = form.getAttribute('action') || form.action;
-    if (rawAction && isLocalUrl(rawAction)) {
-      e.preventDefault();
-      notifyNavigate(rawAction);
-    }
-  }, true);
-})();
-</script>
-`;
-
-/** 注入 iframe 的脚本：拦截嵌套 iframe 的本地 src，通过 postMessage 让父窗口加载内容 */
-const IFRAME_INTERCEPT_SCRIPT = `
-<script>
-(function() {
-  var iframeCounter = 0;
-
-  function isAssetUrl(url) {
-    return /^asset:/i.test(url)
-      || /^https?:\\/\\/asset\\.localhost\\//i.test(url);
-  }
-
-  function isLocalUrl(url) {
-    return url
-      && !isAssetUrl(url)
-      && !url.match(/^https?:/i)
-      && !url.match(/^about:/i)
-      && !url.match(/^data:/i)
-      && !url.match(/^blob:/i)
-      && !url.match(/^\\/\\//);
-  }
-
-  function ensureFrameId(iframe) {
-    var existing = iframe.getAttribute('data-peek-frame-id');
-    if (existing) return existing;
-
-    var nextId = iframe.id || ('peek-iframe-' + (++iframeCounter));
-    iframe.setAttribute('data-peek-frame-id', nextId);
-    return nextId;
-  }
-
-  function notifyIframeNavigate(iframe, url) {
-    window.parent.postMessage({
-      type: 'peek-iframe-navigate',
-      url: url,
-      frameId: ensureFrameId(iframe)
-    }, '*');
-  }
-
-  function handleIframe(iframe, url) {
-    if (!url || !isLocalUrl(url)) return;
-    iframe.removeAttribute('src');
-    notifyIframeNavigate(iframe, url);
-  }
-
-  function findIframeByFrameId(frameId) {
-    if (!frameId) return null;
-
-    var iframes = document.querySelectorAll('iframe');
-    for (var i = 0; i < iframes.length; i += 1) {
-      if (iframes[i].getAttribute('data-peek-frame-id') === frameId) {
-        return iframes[i];
-      }
-    }
-
-    return null;
-  }
-
-  document.querySelectorAll('iframe').forEach(function(iframe) {
-    var url = iframe.getAttribute('src');
-    if (url && isLocalUrl(url)) {
-      handleIframe(iframe, url);
-    }
-  });
-
-  function startObserver() {
-    var target = document.body || document.documentElement;
-    if (!target) return;
-
-    var observer = new MutationObserver(function(mutations) {
-      mutations.forEach(function(mutation) {
-        if (mutation.type === 'attributes' && mutation.target.tagName === 'IFRAME') {
-          var changedUrl = mutation.target.getAttribute('src');
-          if (changedUrl && isLocalUrl(changedUrl)) {
-            handleIframe(mutation.target, changedUrl);
-          }
-        }
-        if (mutation.type === 'childList') {
-          mutation.addedNodes.forEach(function(node) {
-            if (node.tagName === 'IFRAME') {
-              var url = node.getAttribute('src');
-              if (url && isLocalUrl(url)) {
-                handleIframe(node, url);
-              }
-            }
-            if (node.querySelectorAll) {
-              node.querySelectorAll('iframe').forEach(function(iframe) {
-                var url = iframe.getAttribute('src');
-                if (url && isLocalUrl(url)) {
-                  handleIframe(iframe, url);
-                }
-              });
-            }
-          });
-        }
-      });
-    });
-
-    observer.observe(target, {
-      attributes: true,
-      attributeFilter: ['src'],
-      childList: true,
-      subtree: true
-    });
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startObserver);
-  } else {
-    startObserver();
-  }
-
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'peek-iframe-content') {
-      var iframe = findIframeByFrameId(e.data.frameId);
-      if (iframe) {
-        if (typeof e.data.url === 'string' && e.data.url) {
-          iframe.src = e.data.url;
-          return;
-        }
-        iframe.srcdoc = e.data.content;
-      }
-    }
-  });
-})();
-</script>
-`;
 
 function rewriteElementAttribute(
   element: Element,
@@ -425,10 +269,19 @@ function collectElements(root: ParentNode): Element[] {
   return elements;
 }
 
-function appendInjectedScripts(document: Document, body: HTMLElement) {
-  const template = document.createElement("template");
-  template.innerHTML = NAVIGATION_INTERCEPT_SCRIPT + IFRAME_INTERCEPT_SCRIPT;
-  body.append(template.content);
+function prependRuntime(document: Document, context: HtmlPreviewContext, resourceContext: HtmlPreviewContext | null, buildAssetUrl: AssetUrlBuilder) {
+  if (!context.filePath) return;
+  const script = document.createElement("script");
+  script.dataset.peekRuntime = "true";
+  const config = JSON.stringify({
+    sourceUrl: buildAssetUrl(context.filePath),
+    rootUrl: buildAssetUrl(ensureTrailingSlash(getEffectiveRootPath(context) ?? extractDirectoryPath(context.filePath))),
+    resourceBaseUrl: resourceContext?.filePath
+      ? buildAssetUrl(resourceContext.filePath)
+      : document.querySelector("base")?.href ?? buildAssetUrl(context.filePath),
+  }).replace(/</g, "\\u003c");
+  script.textContent = `(${installHtmlPreviewRuntime.toString()})(${config});`;
+  document.head.prepend(script);
 }
 
 function serializeHtmlDocument(document: Document): string {
@@ -553,7 +406,6 @@ export function processHtmlContent(
   const elements = collectElements(document);
 
   const head = document.head;
-  const body = document.body;
   const baseElement = elements.find((element) => element.tagName.toLowerCase() === "base");
   const baseHref = baseElement?.getAttribute("href") ?? null;
   const resourceContext = getBaseResourceContext(baseHref, context);
@@ -608,7 +460,7 @@ export function processHtmlContent(
     head.prepend(injectedBase);
   }
 
-  if (body) appendInjectedScripts(document, body);
+  prependRuntime(document, context, resourceContext, buildAssetUrl);
 
   return serializeHtmlDocument(document);
 }

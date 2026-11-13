@@ -107,10 +107,9 @@ export async function cacheLocalModuleGraph(
   for (const module of modules.values()) {
     const outputPath = outputPaths.get(module.path);
     if (outputPath) {
-      moduleUrls.set(
-        module.path,
-        `${buildAssetUrl(outputPath)}?v=${hashText(module.source)}`
-      );
+      const url = new URL(buildAssetUrl(outputPath));
+      url.searchParams.set("v", hashText(module.source));
+      moduleUrls.set(module.path, url.href);
     }
   }
 

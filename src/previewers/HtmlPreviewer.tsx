@@ -8,6 +8,8 @@ import {
   getEffectiveRootPath,
   prepareHtmlPreviewContent,
   resolveHtmlUrlToPath,
+  withHtmlNavigationSuffix,
+  toHtmlAssetUrl,
 } from "@/utils/htmlPreview";
 import {
   getHtmlPreviewModulePath,
@@ -21,10 +23,26 @@ interface Props {
   content: string;
 }
 
+// Tauri percent-encodes the entire filesystem path. Keep separators visible so
+// URL(entry, location.href) and the injected base retain normal directory semantics.
+function htmlAssetUrl(path: string): string {
+  return toHtmlAssetUrl(path, convertFileSrc);
+}
+
+function freshAssetUrls() {
+  const generation = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (path: string) => {
+    const url = new URL(htmlAssetUrl(path));
+    url.searchParams.set("__peek_reload", generation);
+    return url.href;
+  };
+}
+
 async function prepareModuleGraph(
   entryPath: string,
   rootPath: string | null,
-  entrySource?: string
+  entrySource?: string,
+  assetUrl: (path: string) => string = htmlAssetUrl
 ) {
   return cacheLocalModuleGraph(
     entryPath,
@@ -32,7 +50,7 @@ async function prepareModuleGraph(
     readTextFile,
     getHtmlPreviewModulePath,
     writeHtmlPreviewModuleFile,
-    convertFileSrc,
+    assetUrl,
     entrySource
   );
 }
@@ -42,6 +60,7 @@ export default function HtmlPreviewer({ content }: Props) {
   const [mode, setMode] = useState<"preview" | "source">("preview");
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const navigationRef = useRef<{ path: string; url: string } | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const modeBeforeSearch = useRef<"preview" | "source">("preview");
   const searchForcedSource = useRef(false);
@@ -88,7 +107,9 @@ export default function HtmlPreviewer({ content }: Props) {
 
         try {
           const fileInfo = await loadPreviewFile(targetPath);
+          navigationRef.current = { path: targetPath, url: event.data.url };
           setFile(fileInfo, false);
+          setRefreshKey((value) => value + 1);
         } catch (error) {
           console.error("[Peek] 打开链接文件失败:", targetPath, error);
         }
@@ -103,6 +124,7 @@ export default function HtmlPreviewer({ content }: Props) {
         }
 
         try {
+          const assetUrl = freshAssetUrls();
           const text = await readTextFile(targetPath);
           const processed = await prepareHtmlPreviewContent(
             text,
@@ -110,7 +132,7 @@ export default function HtmlPreviewer({ content }: Props) {
               filePath: targetPath,
               rootPath: folder.rootPath,
             },
-            convertFileSrc,
+            assetUrl,
             readTextFile,
             (modulePath, moduleSource) =>
               prepareModuleGraph(
@@ -119,11 +141,12 @@ export default function HtmlPreviewer({ content }: Props) {
                   filePath: targetPath,
                   rootPath: folder.rootPath,
                 }),
-                moduleSource
+                moduleSource,
+                assetUrl
               )
           );
           const previewPath = await writeHtmlPreviewFile(targetPath, processed);
-          const previewUrl = convertFileSrc(previewPath);
+          const previewUrl = withHtmlNavigationSuffix(assetUrl(previewPath), url);
 
           if (previewWindow) {
             previewWindow.postMessage(
@@ -154,21 +177,27 @@ export default function HtmlPreviewer({ content }: Props) {
 
     const buildPreview = async () => {
       try {
+        const assetUrl = freshAssetUrls();
+        const source = await readTextFile(file.path);
         const processed = await prepareHtmlPreviewContent(
-          content,
+          source,
           htmlContext,
-          convertFileSrc,
+          assetUrl,
           readTextFile,
           (modulePath, moduleSource) =>
             prepareModuleGraph(
               modulePath,
               getEffectiveRootPath(htmlContext),
-              moduleSource
+              moduleSource,
+              assetUrl
             )
         );
         const previewPath = await writeHtmlPreviewFile(file.path, processed);
         if (!cancelled) {
-          setPreviewUrl(convertFileSrc(previewPath));
+          const navigation = navigationRef.current;
+          setPreviewUrl(navigation?.path === file.path
+            ? withHtmlNavigationSuffix(assetUrl(previewPath), navigation.url)
+            : assetUrl(previewPath));
         }
       } catch (error) {
         console.error("[Peek] 生成 HTML 预览失败:", file.path, error);

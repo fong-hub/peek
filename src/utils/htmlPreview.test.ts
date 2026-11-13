@@ -10,6 +10,8 @@ import {
   processHtmlContent,
   resolveHtmlUrlToPath,
   toFileUrl,
+  withHtmlNavigationSuffix,
+  toHtmlAssetUrl,
 } from "@/utils/htmlPreview";
 
 const happyDomWindow = window as typeof window & {
@@ -127,7 +129,8 @@ describe("htmlPreview utils", () => {
     expect(processed).toContain("min-height: 100vh");
     expect(processed).toContain('const closingTag = "</body>";');
     expect(processed).toContain(`const markup = '<img src="./runtime.png">';`);
-    expect(processed.match(/type: 'peek-navigate'/g)).toHaveLength(1);
+    expect(processed.match(/data-peek-runtime="true"/g)).toHaveLength(1);
+    expect(processed.indexOf("data-peek-runtime")).toBeLessThan(processed.indexOf("const closingTag"));
   });
 
   it("preserves query strings, fragments, srcset descriptors, and local base paths", () => {
@@ -167,16 +170,38 @@ describe("htmlPreview utils", () => {
 
     expect(processed).toContain('data-peek-inline-style="true"');
     expect(processed).toContain(
-      'url("http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/pattern.svg")'
+      `url("${buildAssetUrl(path.join(fixtureRoot, "assets/pattern.svg"))}")`
     );
     expect(processed).toContain(
-      '@import "http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/theme.css"'
+      `@import "${buildAssetUrl(path.join(fixtureRoot, "assets/theme.css"))}"`
     );
     expect(processed).toContain(
-      'src="http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/assets/app.js"'
+      `src="${buildAssetUrl(path.join(fixtureRoot, "assets/app.js"))}"`
     );
     expect(processed).toContain(
-      '<base href="http://asset.localhost/Users/fong/work/code/peek/examples/html-preview-repro/index.html">'
+      `<base href="${buildAssetUrl(htmlPath)}">`
     );
+  });
+});
+
+describe("preview navigation URLs", () => {
+  it("normalizes Tauri-encoded paths without introducing a second leading slash", () => {
+    const path = "/Users/test/原型 #1/index.html";
+    const url = toHtmlAssetUrl(path, path => `asset://localhost/${encodeURIComponent(path)}`);
+    expect(url).toBe("asset://localhost/Users/test/%E5%8E%9F%E5%9E%8B%20%231/index.html");
+    expect(fromAssetUrl(url)).toBe(path);
+    expect(new URL("module.html", url).pathname).toBe("/Users/test/%E5%8E%9F%E5%9E%8B%20%231/module.html");
+    const windows = toHtmlAssetUrl("C:/site/index.html", path => `http://asset.localhost/${encodeURIComponent(path)}`);
+    expect(fromAssetUrl(windows)).toBe("C:/site/index.html");
+  });
+  it("keeps embedded-mode flags, bridge tokens, repeated parameters and routes", () => {
+    expect(withHtmlNavigationSuffix("asset://localhost/cache/page.html?__peek_reload=new",
+      "asset://localhost/site/module.html?gdmsEmbed=1&gdmsBridge=token&tag=a&tag=b&__peek_reload=old#detail"))
+      .toBe("asset://localhost/cache/page.html?__peek_reload=new&gdmsEmbed=1&gdmsBridge=token&tag=a&tag=b#detail");
+  });
+  it("keeps fresh resource versions when source URLs already have a query", () => {
+    const result = processHtmlContent('<script src="catalog.js?version=2#boot"></script>',
+      { filePath: "/site/index.html" }, path => buildAssetUrl(path) + "?__peek_reload=new");
+    expect(result).toContain('src="http://asset.localhost/site/catalog.js?__peek_reload=new&amp;version=2#boot"');
   });
 });

@@ -57,4 +57,18 @@ describe("HTML module graph cache", () => {
       'from "asset://localhost/cache/helper.js?v='
     );
   });
+  it("retains a reload generation throughout the module graph", async () => {
+    const written = new Map<string, string>();
+    const entry = await cacheLocalModuleGraph(
+      "/site/app.js", { filePath: "/site/index.html" },
+      async path => path.endsWith("app.js") ? 'import "./child.js";' : "export const count = 4;",
+      async path => `/cache${path}`,
+      async (path, source) => { written.set(path, source); return path; },
+      path => `asset://localhost${path}?__peek_reload=fresh`
+    );
+    expect(new URL(entry).searchParams.get("__peek_reload")).toBe("fresh");
+    expect(new URL(entry).searchParams.get("v")).toBeTruthy();
+    expect(written.get("/site/app.js")).toContain("child.js?__peek_reload=fresh&v=");
+  });
+
 });
