@@ -3,6 +3,7 @@ import { FileText, FolderOpen, FolderTree, Info, Moon, PanelLeft, Search, Settin
 import { useStore } from "@/store/useStore";
 import { openFileDialog, openFolderDialog } from "@/utils/openPreview";
 import About from "./About";
+import AppIcon from "./AppIcon";
 import ShortcutSettings from "./ShortcutSettings";
 import { formatShortcut } from "@/utils/shortcuts";
 import { getSearchableContent } from "@/utils/search";
@@ -55,9 +56,7 @@ export default function Header() {
     <header className="h-12 flex items-center justify-between px-4 border-b border-border bg-bg-secondary flex-shrink-0">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex flex-shrink-0 items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-accent flex items-center justify-center">
-            <span className="text-white text-xs font-bold">P</span>
-          </div>
+          <AppIcon className="h-6 w-6" />
           <span className="font-semibold text-sm text-text-primary">Peek</span>
         </div>
         {folder.rootPath && (

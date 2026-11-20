@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { Clock3, FileSearch, FileText, FolderOpen, FolderTree, History, Keyboard } from "lucide-react";
+import AppIcon from "./AppIcon";
+import { Clock3, FileText, FolderOpen, FolderTree, History, Keyboard } from "lucide-react";
 import { getRecentItems } from "@/utils/recent";
 import {
   openFileDialog,
@@ -23,9 +24,7 @@ export default function EmptyState() {
       <div className="mx-auto flex min-h-full max-w-5xl flex-col justify-center gap-8 px-6 py-10 text-text-secondary">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-tertiary">
-              <FileSearch size={32} className="text-accent" />
-            </div>
+            <AppIcon className="mb-4 h-16 w-16" />
             <h2 className="mb-2 text-3xl font-semibold text-text-primary">
               开发者文件预览器
             </h2>

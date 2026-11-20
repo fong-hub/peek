@@ -18,6 +18,8 @@ import { check, type DownloadEvent } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 
+import AppIcon from "./AppIcon";
+
 interface AboutProps {
   onClose: () => void;
 }
@@ -197,9 +199,7 @@ export default function About({ onClose }: AboutProps) {
         <div className="p-6">
           {/* Logo 和应用信息 */}
           <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl font-bold text-accent">P</span>
-            </div>
+            <AppIcon className="h-16 w-16" />
             <div>
               <h2 className="text-lg font-bold text-text-primary">Peek</h2>
               <p className="text-sm text-text-secondary">开发者文件预览器</p>
