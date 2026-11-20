@@ -54,7 +54,7 @@ function renderPreviewer(file: FileInfo) {
 
   switch (file.type) {
     case "markdown":
-      return <MarkdownPreviewer content={file.content} />;
+      return <MarkdownPreviewer content={file.content} filePath={file.path} />;
     case "json":
       return <JsonPreviewer content={file.content} />;
     case "html":
